@@ -26,6 +26,7 @@ predictions/
 scripts/
 pytorch_model_*
 __pycache__
+log/
 
 # Distribution / packaging
 .Python

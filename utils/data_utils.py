@@ -1,3 +1,9 @@
+import logging
+
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 def _truncate_seq_pair(tokens_a, tokens_b, max_length):
     """Truncates a sequence pair in place to the maximum length."""
@@ -18,7 +24,7 @@ def _truncate_seq_pair(tokens_a, tokens_b, max_length):
 class InputFeatures(object):
     """A single set of features of data."""
 
-    def __init__(self, guid, input_ids, input_mask, segment_ids, sub_word_masks, label_id):
+    def __init__(self, guid, input_ids, input_mask, segment_ids, sub_word_masks, label_id=None):
         self.guid = guid
         self.input_ids = input_ids
         self.input_mask = input_mask
@@ -28,10 +34,6 @@ class InputFeatures(object):
 
 def convert_examples_to_features(examples, tokenizer, label_list=None, max_seq_length=128):
     """Loads a data file into a list of `InputBatch`s."""
-
-    label_map = None
-    if label_list:
-        label_map = {label: i for i, label in enumerate(label_list)}
 
     features = []
     for (ex_index, example) in enumerate(examples):
@@ -96,38 +98,22 @@ def convert_examples_to_features(examples, tokenizer, label_list=None, max_seq_l
         assert len(segment_ids) == max_seq_length
         assert len(sub_word_masks) == max_seq_length
 
-        # if label_map:
-        #     if example.label:
-        #         label_id = label_map[example.label]
-        #     else:
-        #         label_id = None
-        # else:
-        #     if example.label:
-        #         label_id = float(example.label)
-        #     else:
-        #         label_id = None
 
-        # guid = example.guid
-
-        # if ex_index < 5:
-        #     logger.info("*** Example ***")
-        #     logger.info("guid: %s" % (example.guid))
-        #     logger.info("tokens: %s" % " ".join(
-        #         [str(x) for x in tokens]))
-        #     logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
-        #     logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
-        #     logger.info(
-        #         "segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
-        #     if example.label is not None:
-        #         logger.info("label: %s (id = %d)" % (example.label, label_id))
+        if ex_index < 3:
+            logger.info("*** Example ***")
+            logger.info("ex_index: %s" % (ex_index))
+            logger.info("tokens: %s" % " ".join([str(x) for x in tokens]))
+            logger.info("input_ids: %s" % " ".join([str(x) for x in input_ids]))
+            logger.info("input_mask: %s" % " ".join([str(x) for x in input_mask]))
+            logger.info("segment_ids: %s" % " ".join([str(x) for x in segment_ids]))
 
         features.append(
             InputFeatures(
-                guid=None,
+                          guid=ex_index,
                           input_ids=input_ids,
                           input_mask=input_mask,
                           segment_ids=segment_ids,
                           sub_word_masks=sub_word_masks,
-                          label_id=None
             ))
+
     return features

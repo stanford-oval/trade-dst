@@ -1,24 +1,15 @@
-import torch
-import torch.nn as nn
-from torch.autograd import Variable
 from torch.optim import lr_scheduler
 from torch import optim
 import torch.nn.functional as F
 import random
+import json
+import torch
+import torch.nn as nn
+import os
 import numpy as np
 
-# import matplotlib.pyplot as plt
-# import seaborn  as sns
-# import nltk
-import os
-import json
-# import pandas as pd
-import copy
-
-from utils.measures import wer, moses_multi_bleu
-from utils.masked_cross_entropy import *
-from utils.config import *
-import pprint
+from utils.masked_cross_entropy import masked_cross_entropy_for_value
+from utils.config import args, USE_CUDA, PAD_token
 
 from utils.data_utils import convert_examples_to_features
 from transformers.modeling_bert import BertPreTrainedModel, BertModel
@@ -331,24 +322,16 @@ class BERTEncoder(nn.Module):
 
         self.tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
         self.bert = BertModel(bert_config)
+
         # load desired layers from pre-trained model
         self.bert.load_state_dict(pre_trained_model.state_dict(), strict=False)
 
         self.proj = nn.Linear(bert_config.hidden_size, hidden_size)
 
-        # self.vocab_size = vocab_size
-        # self.hidden_size = hidden_size
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(dropout)
-        # self.embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=PAD_token)
-        # self.embedding.weight.data.normal_(0, 0.1)
-        # self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True)
-        # self.domain_W = nn.Linear(hidden_size, nb_domain)
-
 
     def forward(self, all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks):
-
-        # prapare data for BERT
 
         sequence_output, pooled_output = self.bert(all_input_ids, attention_mask=all_input_mask, token_type_ids=all_segment_ids)
 

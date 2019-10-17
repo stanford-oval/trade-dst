@@ -1,9 +1,8 @@
-import torch
 from torch.nn import functional
 from torch.autograd import Variable
-from utils.config import *
+from utils.config import USE_CUDA
+import torch
 import torch.nn as nn
-import numpy as np
 
 def sequence_mask(sequence_length, max_len=None):
     if max_len is None:

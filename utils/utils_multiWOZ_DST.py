@@ -1,18 +1,7 @@
 import json
+import random
 import torch
 import torch.utils.data as data
-import unicodedata
-import string
-import re
-import random
-import time
-import math
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from utils.config import *
-import ast
-from collections import Counter
 from collections import OrderedDict
 from embeddings import GloveEmbedding, KazumaCharEmbedding
 from tqdm import tqdm
@@ -20,7 +9,8 @@ import os
 import pickle
 from random import shuffle
 
-from .fix_label import *
+from utils.config import args, USE_CUDA, PAD_token, SOS_token, EOS_token, UNK_token
+from .fix_label import fix_general_label_error
 
 EXPERIMENT_DOMAINS = ["hotel", "train", "restaurant", "attraction", "taxi"]
 

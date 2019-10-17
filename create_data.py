@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import copy
 import json
 import os
 import re
@@ -12,9 +11,6 @@ import difflib
 import numpy as np
 
 np.set_printoptions(precision=3)
-
-np.random.seed(2)
-
 
 '''
 Most of the codes are from https://github.com/budzianowski/multiwoz
@@ -313,10 +309,10 @@ def loadData():
 
     if not os.path.exists(data_url):
         print("Downloading and unzipping the MultiWOZ dataset")
-        # resp = urllib.request.urlopen(dataset_url)
-        # zip_ref = ZipFile(BytesIO(resp.read()))
-        # zip_ref.extractall("data/multi-woz")
-        # zip_ref.close()
+        resp = urllib.request.urlopen(dataset_url)
+        zip_ref = ZipFile(BytesIO(resp.read()))
+        zip_ref.extractall("data/multi-woz")
+        zip_ref.close()
         shutil.copy('data/multi-woz/MULTIWOZ2 2/data.json', 'data/multi-woz/')
         shutil.copy('data/multi-woz/MULTIWOZ2 2/valListFile.json', 'data/multi-woz/')
         shutil.copy('data/multi-woz/MULTIWOZ2 2/testListFile.json', 'data/multi-woz/')
