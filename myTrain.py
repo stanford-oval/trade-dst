@@ -8,6 +8,14 @@ from models.TRADE import *
 python myTrain.py -dec= -bsz= -hdd= -dr= -lr=
 '''
 
+seed = args['seed']
+
+random.seed(seed)
+np.random.seed(seed)
+torch.manual_seed(seed)
+if USE_CUDA:
+    torch.cuda.manual_seed_all(seed)
+
 early_stop = args['earlyStop']
 
 if args['dataset']=='multiwoz':

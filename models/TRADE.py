@@ -20,6 +20,11 @@ from utils.masked_cross_entropy import *
 from utils.config import *
 import pprint
 
+from utils.data_utils import convert_examples_to_features
+from transformers.modeling_bert import BertPreTrainedModel, BertModel
+from transformers.tokenization_bert import BertTokenizer
+from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
+
 class TRADE(nn.Module):
     def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, nb_train_vocab=0):
         super(TRADE, self).__init__()
@@ -36,8 +41,13 @@ class TRADE(nn.Module):
         self.nb_gate = len(gating_dict)
         self.cross_entorpy = nn.CrossEntropyLoss()
 
-        self.encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout)
-        self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate) 
+        if args['encoder'] == 'RNN':
+            self.encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout)
+            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate)
+        else:
+            self.encoder = BERTEncoder(hidden_size, self.dropout)
+            self.decoder = Generator(self.lang, None, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate)
+
         
         if path:
             if USE_CUDA:
@@ -88,6 +98,10 @@ class TRADE(nn.Module):
         # Encode and Decode
         use_teacher_forcing = random.random() < args["teacher_forcing_ratio"]
         all_point_outputs, gates, words_point_out, words_class_out = self.encode_and_decode(data, use_teacher_forcing, slot_temp)
+        # all_point_outputs  30 32 7 18311
+        # gates  30 32 3
+        # words_point_out UNK...
+        # words_class_out []
 
         loss_ptr = masked_cross_entropy_for_value(
             all_point_outputs.transpose(0, 1).contiguous(),
@@ -118,29 +132,46 @@ class TRADE(nn.Module):
         self.optimizer.step()
 
     def encode_and_decode(self, data, use_teacher_forcing, slot_temp):
-        # Build unknown mask for memory to encourage generalization
-        if args['unk_mask'] and self.decoder.training:
-            story_size = data['context'].size()
-            rand_mask = np.ones(story_size)
-            bi_mask = np.random.binomial([np.ones((story_size[0],story_size[1]))], 1-self.dropout)[0]
-            rand_mask = rand_mask * bi_mask
-            rand_mask = torch.Tensor(rand_mask)
-            if USE_CUDA: 
-                rand_mask = rand_mask.cuda()
-            story = data['context'] * rand_mask.long()
-        else:
-            story = data['context']
+        if args['encoder'] == 'RNN':
+            # Build unknown mask for memory to encourage generalization
+            if args['unk_mask'] and self.decoder.training:
+                story_size = data['context'].size()
+                rand_mask = np.ones(story_size)
+                bi_mask = np.random.binomial([np.ones((story_size[0],story_size[1]))], 1-self.dropout)[0]
+                rand_mask = rand_mask * bi_mask
+                rand_mask = torch.Tensor(rand_mask)
+                if USE_CUDA:
+                    rand_mask = rand_mask.cuda()
+                story = data['context'] * rand_mask.long()
+            else:
+                story = data['context']
+
+            encoded_outputs, encoded_hidden = self.encoder(story.transpose(0, 1), data['context_len'])
 
         # Encode dialog history
-        encoded_outputs, encoded_hidden = self.encoder(story.transpose(0, 1), data['context_len'])
+        # story  32 396
+        # data['context_len'] 32
+        elif args['encoder'] == 'BERT':
+            story = data['context']
+            story_plain = data['context_plain']
+            features = convert_examples_to_features(story_plain, tokenizer=self.encoder.tokenizer, max_seq_length=max(data['context_len']))
+            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+            all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8)
+            all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+            all_sub_word_masks = torch.tensor([f.sub_word_masks for f in features], dtype=torch.uint8)
 
-        # Get the words that can be copy from the memory
+            encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
+            encoded_hidden = encoded_hidden.unsqueeze(0)
+
+        # Get the words that can be copied from the memory
         batch_size = len(data['context_len'])
         self.copy_list = data['context_plain']
         max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
+
         all_point_outputs, all_gate_outputs, words_point_out, words_class_out = self.decoder.forward(batch_size, \
             encoded_hidden, encoded_outputs, data['context_len'], story, max_res_len, data['generate_y'], \
-            use_teacher_forcing, slot_temp) 
+            use_teacher_forcing, slot_temp)
+
         return all_point_outputs, all_gate_outputs, words_point_out, words_class_out
 
     def evaluate(self, dev, matric_best, slot_temp, early_stop=None):
@@ -150,7 +181,7 @@ class TRADE(nn.Module):
         print("STARTING EVALUATION")
         all_prediction = {}
         inverse_unpoint_slot = dict([(v, k) for k, v in self.gating_dict.items()])
-        pbar = tqdm(enumerate(dev),total=len(dev))
+        pbar = tqdm(enumerate(dev), total=len(dev))
         for j, data_dev in pbar: 
             # Encode and Decode
             batch_size = len(data_dev['context_len'])
@@ -287,10 +318,48 @@ class TRADE(nn.Module):
                 precision, recall, F1, count = 0, 0, 0, 1
         return F1, recall, precision, count
 
+class BERTEncoder(nn.Module):
+    def __init__(self, hidden_size, dropout):
+        super(BERTEncoder, self).__init__()
+
+        # Load config and pre-trained model
+        pre_trained_model = BertModel.from_pretrained(args['bert_model'], cache_dir=PYTORCH_PRETRAINED_BERT_CACHE / 'distributed_{}'.format(-1))
+        bert_config = pre_trained_model.config
+
+        # modify config if you want
+        bert_config.num_hidden_layers = args['num_bert_layers']
+
+        self.tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
+        self.bert = BertModel(bert_config)
+        # load desired layers from pre-trained model
+        self.bert.load_state_dict(pre_trained_model.state_dict(), strict=False)
+
+        self.proj = nn.Linear(bert_config.hidden_size, hidden_size)
+
+        # self.vocab_size = vocab_size
+        # self.hidden_size = hidden_size
+        self.dropout = dropout
+        self.dropout_layer = nn.Dropout(dropout)
+        # self.embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=PAD_token)
+        # self.embedding.weight.data.normal_(0, 0.1)
+        # self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True)
+        # self.domain_W = nn.Linear(hidden_size, nb_domain)
+
+
+    def forward(self, all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks):
+
+        # prapare data for BERT
+
+        sequence_output, pooled_output = self.bert(all_input_ids, attention_mask=all_input_mask, token_type_ids=all_segment_ids)
+
+        output = self.proj(sequence_output)
+        hidden = self.proj(pooled_output)
+
+        return output, hidden
 
 class EncoderRNN(nn.Module):
     def __init__(self, vocab_size, hidden_size, dropout, n_layers=1):
-        super(EncoderRNN, self).__init__()      
+        super(EncoderRNN, self).__init__()
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size  
         self.dropout = dropout
@@ -322,14 +391,20 @@ class EncoderRNN(nn.Module):
         # Note: we run this all at once (over multiple batches of multiple sequences)
         embedded = self.embedding(input_seqs)
         embedded = self.dropout_layer(embedded)
+        # embedded  344, 32, 400
         hidden = self.get_state(input_seqs.size(1))
+        #hidden 2, 32, 400
         if input_lengths:
             embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=False)
         outputs, hidden = self.gru(embedded, hidden)
         if input_lengths:
-           outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=False)   
+           outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=False)
+        # outputs  344, 32, 800
+        # They sum hidden and output states from different directions but WHY?! #TODO
         hidden = hidden[0] + hidden[1]
+        # hidden 32 400
         outputs = outputs[:,:,:self.hidden_size] + outputs[:,:,self.hidden_size:]
+        # outputs  344, 32, 400
         return outputs.transpose(0,1), hidden.unsqueeze(0)
 
 
@@ -338,7 +413,22 @@ class Generator(nn.Module):
         super(Generator, self).__init__()
         self.vocab_size = vocab_size
         self.lang = lang
-        self.embedding = shared_emb 
+        if shared_emb:
+            self.embedding = shared_emb
+        else:
+            self.embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=PAD_token)
+            self.embedding.weight.data.normal_(0, 0.1)
+            if args["load_embedding"]:
+                with open(os.path.join("data/", 'emb{}.json'.format(vocab_size))) as f:
+                    E = json.load(f)
+                new = self.embedding.weight.data.new
+                self.embedding.weight.data.copy_(new(E))
+                self.embedding.weight.requires_grad = True
+                print("Encoder embedding requires_grad", self.embedding.weight.requires_grad)
+
+            if args["fix_embedding"]:
+                self.embedding.weight.requires_grad = False
+
         self.dropout_layer = nn.Dropout(dropout)
         self.gru = nn.GRU(hidden_size, hidden_size, dropout=dropout)
         self.nb_gate = nb_gate
@@ -393,7 +483,7 @@ class Generator(nn.Module):
                 slot_emb_arr = torch.cat((slot_emb_arr, slot_emb_exp), dim=0)
 
         if args["parallel_decode"]:
-            # Compute pointer-generator output, puting all (domain, slot) in one batch
+            # Compute pointer-generator output, putting all (domain, slot) in one batch
             decoder_input = self.dropout_layer(slot_emb_arr).view(-1, self.hidden_size) # (batch*|slot|) * emb
             hidden = encoded_hidden.repeat(1, len(slot_temp), 1) # 1 * (batch*|slot|) * emb
             words_point_out = [[] for i in range(len(slot_temp))]
