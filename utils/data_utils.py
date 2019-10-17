@@ -98,8 +98,8 @@ def convert_examples_to_features(examples, tokenizer, label_list=None, max_seq_l
         assert len(segment_ids) == max_seq_length
         assert len(sub_word_masks) == max_seq_length
 
-
-        if ex_index < 3:
+        # TODO
+        if ex_index < 0:
             logger.info("*** Example ***")
             logger.info("ex_index: %s" % (ex_index))
             logger.info("tokens: %s" % " ".join([str(x) for x in tokens]))

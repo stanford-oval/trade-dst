@@ -82,7 +82,7 @@ parser.add_argument('--log_dir', help='Save logs here', required=False, default=
 parser.add_argument("--delete_ok", type=str2bool, default=False, help='whether to delete the result directory if it already exists')
 
 # bert parameters
-parser.add_argument("--bert_model", default=None, type=str, required=True, help="Bert pre-trained model selected")
+parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")
 parser.add_argument("--do_lower_case", type=str2bool, default=False, help="Set this flag if you are using an uncased model.")
 parser.add_argument("--num_bert_layers", type=int, default=12, help='num_bert_layers to use in our model')
 parser.add_argument("--encoder", type=str, default='RNN', choices=['RNN', 'BERT'], help='type of encoder to use for context')

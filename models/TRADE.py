@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import os
 import numpy as np
+from tqdm import tqdm
 
 from utils.masked_cross_entropy import masked_cross_entropy_for_value
 from utils.config import args, USE_CUDA, PAD_token
@@ -146,10 +147,16 @@ class TRADE(nn.Module):
             story = data['context']
             story_plain = data['context_plain']
             features = convert_examples_to_features(story_plain, tokenizer=self.encoder.tokenizer, max_seq_length=max(data['context_len']))
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
-            all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8)
-            all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
-            all_sub_word_masks = torch.tensor([f.sub_word_masks for f in features], dtype=torch.uint8)
+            if USE_CUDA:
+                all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long).cuda()
+                all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8).cuda()
+                all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long).cuda()
+                all_sub_word_masks = torch.tensor([f.sub_word_masks for f in features], dtype=torch.uint8).cuda()
+            else:
+                all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+                all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8)
+                all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+                all_sub_word_masks = torch.tensor([f.sub_word_masks for f in features], dtype=torch.uint8)
 
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
@@ -366,9 +373,9 @@ class EncoderRNN(nn.Module):
     def get_state(self, bsz):
         """Get cell states and hidden states."""
         if USE_CUDA:
-            return Variable(torch.zeros(2, bsz, self.hidden_size)).cuda()
+            return torch.zeros(2, bsz, self.hidden_size).cuda()
         else:
-            return Variable(torch.zeros(2, bsz, self.hidden_size))
+            return torch.zeros(2, bsz, self.hidden_size)
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         # Note: we run this all at once (over multiple batches of multiple sequences)

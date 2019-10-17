@@ -17,6 +17,9 @@ def run():
 
     seed = args['seed']
 
+    if args['encoder'] == 'BERT' and args['bert_model'] is None:
+        raise ValueError('bert_model should be specified when using BERT encoder.')
+
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
