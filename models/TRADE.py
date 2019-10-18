@@ -183,7 +183,8 @@ class TRADE(nn.Module):
         for j, data_dev in pbar: 
             # Encode and Decode
             batch_size = len(data_dev['context_len'])
-            _, gates, words, class_words = self.encode_and_decode(data_dev, False, slot_temp)
+            with torch.no_grad():
+                _, gates, words, class_words = self.encode_and_decode(data_dev, False, slot_temp)
 
             for bi in range(batch_size):
                 if data_dev["ID"][bi] not in all_prediction.keys():

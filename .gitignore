@@ -14,16 +14,11 @@ __pycache__/
 
 # extras
 .DS_Store
-run_travis.sh
 .idea
 Pipfile*
 results
 trained_models
-hubert-tests*
-run.sh
 yamls
-predictions/
-scripts/
 pytorch_model_*
 __pycache__
 log/
