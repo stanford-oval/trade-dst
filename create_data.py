@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-import copy
 import json
 import os
 import re
@@ -12,9 +11,6 @@ import difflib
 import numpy as np
 
 np.set_printoptions(precision=3)
-
-np.random.seed(2)
-
 
 '''
 Most of the codes are from https://github.com/budzianowski/multiwoz

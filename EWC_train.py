@@ -1,11 +1,10 @@
-from utils.config import *
-from models.TRADE import *
-from torch import autograd
+from utils.config import args
 from copy import deepcopy
-import pickle 
+import pickle
 import os.path
+import warnings
 
-
+warnings.simplefilter("ignore", UserWarning)
 #### LOAD MODEL path
 except_domain = args['except_domain']
 directory = args['path'].split("/")
@@ -25,15 +24,15 @@ filename_fisher = args['path']+"fisher{}".format(args["fisher_sample"])
 
 if(os.path.isfile(filename_fisher) ):
     print("Load Fisher Matrix" + filename_fisher)
-    [fisher,optpar] = pickle.load(open(filename_fisher,'rb'))
+    [fisher, optpar] = pickle.load(open(filename_fisher,'rb'))
 else:
     train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, max_word = prepare_data_seq(True, args['task'], False, batch_size=1)
     model = globals()[args["decoder"]](
-                                        int(HDD), 
-                                        lang=lang, 
-                                        path=args['path'], 
-                                        task=args["task"], 
-                                        lr=args["learn"], 
+                                        int(HDD),
+                                        lang=lang,
+                                        path=args['path'],
+                                        task=args["task"],
+                                        lr=args["learn"],
                                         dropout=args["drop"],
                                         slots=SLOTS_LIST,
                                         gating_dict=gating_dict)
@@ -51,7 +50,7 @@ else:
         model.loss_ptr_to_bp.backward()
         for n, p in model.named_parameters():
             if p.grad is not None:
-                fisher[n].data += p.grad.data ** 2 
+                fisher[n].data += p.grad.data ** 2
         if(i == args["fisher_sample"]):break
 
     for name_f,_ in fisher.items():#range(len(fisher)):
@@ -72,13 +71,13 @@ train_single, dev_single, test_single, _, _, SLOTS_LIST_single, _, _ = prepare_d
 args['except_domain'] = except_domain
 
 
-#### LOAD MODEL 
+#### LOAD MODEL
 model = globals()[args["decoder"]](
-    int(HDD), 
-    lang=lang, 
-    path=args['path'], 
-    task=args["task"], 
-    lr=args["learn"], 
+    int(HDD),
+    lang=lang,
+    path=args['path'],
+    task=args["task"],
+    lr=args["learn"],
     dropout=args["drop"],
     slots=SLOTS_LIST,
     gating_dict=gating_dict)
@@ -87,7 +86,7 @@ avg_best, cnt, acc = 0.0, 0, 0.0
 weights_best = deepcopy(model.state_dict())
 try:
     for epoch in range(100):
-        print("Epoch:{}".format(epoch))  
+        print("Epoch:{}".format(epoch))
         # Run the train function
         pbar = tqdm(enumerate(train_single),total=len(train_single))
         for i, data in pbar:
@@ -111,9 +110,9 @@ try:
                 weights_best = deepcopy(model.state_dict())
             else:
                 cnt+=1
-            if(cnt == 6 or (acc==1.0 and args["earlyStop"]==None)): 
-                print("Ran out of patient, early stop...")  
-                break 
+            if(cnt == 6 or (acc==1.0 and args["earlyStop"]==None)):
+                print("Ran out of patient, early stop...")
+                break
 except KeyboardInterrupt:
     pass
 
@@ -124,8 +123,8 @@ model.eval()
 # After Fine tuning...
 print("[Info] After Fine Tune ...")
 print("[Info] Test Set on 4 domains...")
-acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2]) 
+acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2])
 print("[Info] Test Set on 1 domain {} ...".format(except_domain))
-acc_test = model.evaluate(test_single, 1e7, SLOTS_LIST[3]) 
+acc_test = model.evaluate(test_single, 1e7, SLOTS_LIST[3])
 
 

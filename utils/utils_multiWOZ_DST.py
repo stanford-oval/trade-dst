@@ -1,18 +1,7 @@
 import json
+import random
 import torch
 import torch.utils.data as data
-import unicodedata
-import string
-import re
-import random
-import time
-import math
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-from utils.config import *
-import ast
-from collections import Counter
 from collections import OrderedDict
 from embeddings import GloveEmbedding, KazumaCharEmbedding
 from tqdm import tqdm
@@ -20,7 +9,8 @@ import os
 import pickle
 from random import shuffle
 
-from .fix_label import *
+from utils.config import args, USE_CUDA, PAD_token, SOS_token, EOS_token, UNK_token
+from .fix_label import fix_general_label_error
 
 EXPERIMENT_DOMAINS = ["hotel", "train", "restaurant", "attraction", "taxi"]
 
@@ -223,9 +213,9 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
                     lang.index_words(turn["system_transcript"], 'utter')
                     lang.index_words(turn["transcript"], 'utter')
         # determine training data ratio, default is 100%
-        if training and dataset=="train" and args["data_ratio"]!=100:
+        if training and args["data_ratio"] != 100:
             random.Random(10).shuffle(dials)
-            dials = dials[:int(len(dials)*0.01*args["data_ratio"])]
+            dials = dials[:max(int(len(dials)*0.01*args["data_ratio"]), 1)]
         
         cnt_lin = 1
         for dial_dict in dials:
@@ -359,6 +349,8 @@ def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity):
 
 def dump_pretrained_emb(word2index, index2word, dump_path):
     print("Dumping pretrained embeddings...")
+    # import ssl
+    # ssl._create_default_https_context = ssl._create_unverified_context
     embeddings = [GloveEmbedding(), KazumaCharEmbedding()]
     E = []
     for i in tqdm(range(len(word2index.keys()))):
