@@ -1,0 +1,5 @@
+IAM_ROLE=arn:aws:iam::373474209952:role/almond-research-pod-role
+COMMON_IMAGE=373474209952.dkr.ecr.us-west-2.amazonaws.com/trade-dst:base
+IMAGE=373474209952.dkr.ecr.us-west-2.amazonaws.com/trade-dst:latest
+DATASET_OWNER=gcampax
+OWNER=$(id -un)

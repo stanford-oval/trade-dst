@@ -8,8 +8,8 @@ embeddings==0.0.6
 idna==2.8
 kiwisolver==1.1.0
 matplotlib==3.1.0
-mkl-fft==1.0.12
-mkl-random==1.0.2
+#mkl-fft #==1.0.12
+#mkl-random #==1.0.2
 numpy==1.16.4
 pycparser==2.19
 pyparsing==2.4.0
