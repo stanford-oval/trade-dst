@@ -5,6 +5,7 @@ import logging
 from tqdm import tqdm
 import shutil
 import os
+import warnings
 
 from models.TRADE import TRADE
 from utils.config import args, USE_CUDA
@@ -12,6 +13,8 @@ from utils.config import args, USE_CUDA
 '''
 python myTrain.py -dec= -bsz= -hdd= -dr= -lr=
 '''
+
+warnings.simplefilter("ignore", UserWarning)
 
 def run():
 

@@ -1,6 +1,8 @@
 from utils.config import args
 from copy import deepcopy
+import warnings
 
+warnings.simplefilter("ignore", UserWarning)
 
 except_domain = args['except_domain']
 directory = args['path'].split("/")

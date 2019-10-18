@@ -2,7 +2,9 @@ from utils.config import args
 from copy import deepcopy
 import pickle
 import os.path
+import warnings
 
+warnings.simplefilter("ignore", UserWarning)
 #### LOAD MODEL path
 except_domain = args['except_domain']
 directory = args['path'].split("/")

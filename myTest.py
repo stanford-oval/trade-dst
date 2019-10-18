@@ -1,9 +1,12 @@
 from models.TRADE import TRADE
 from utils.config import args
+import warnings
 
 '''
 python3 myTest.py -ds= -path= -bsz=
 '''
+
+warnings.simplefilter("ignore", UserWarning)
 
 def run():
 
