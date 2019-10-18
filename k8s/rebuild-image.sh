@@ -1,20 +1,16 @@
 #!/bin/bash
 
-. lib.sh
-. config
-check_config "IMAGE COMMON_IMAGE genie_version thingtalk_version"
+srcdir=`dirname $0`
+. "${srcdir}/config"
+. "${srcdir}/lib.sh"
+check_config "IMAGE COMMON_IMAGE"
 
 set -e
 set -x
 
-#podman build -t ${COMMON_IMAGE} \
-#  --build-arg THINGPEDIA_DEVELOPER_KEY=${THINGPEDIA_DEVELOPER_KEY} \
-#  -f Dockerfile.common .
-#podman push ${COMMON_IMAGE}
+#docker build -t ${COMMON_IMAGE} \
+#  -f ${srcdir}/Dockerfile.base ${srcdir}/..
+#docker push ${COMMON_IMAGE}
 
-podman build -t ${IMAGE} \
-  --build-arg COMMON_IMAGE=${COMMON_IMAGE} \
-  --build-arg THINGTALK_VERSION=${thingtalk_version} \
-  --build-arg GENIE_VERSION=${genie_version} \
-  .
-podman push ${IMAGE}
+docker build -t ${IMAGE} -f ${srcdir}/Dockerfile --build-arg COMMON_IMAGE=${COMMON_IMAGE} ${srcdir}/..
+docker push ${IMAGE}

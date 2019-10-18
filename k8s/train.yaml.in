@@ -5,7 +5,7 @@ metadata:
   name: @@JOB_NAME@@
   namespace: research
   labels:
-    app: genie-toolkit
+    app: trade-dst
     owner: @@OWNER@@
     job_type: train
 
@@ -32,7 +32,7 @@ spec:
       - name: main
         image: @@IMAGE@@
         imagePullPolicy: Always
-        command: ['/bin/sh', '-c', '/opt/genie-toolkit/train-job.sh @@cmdline@@']
+        command: ['/bin/sh', '-c', 'k8s/train-job.sh @@cmdline@@']
         resources:
           limits:
             cpu: 8
