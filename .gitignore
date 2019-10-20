@@ -119,3 +119,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# temps
+zero_shot.sh
