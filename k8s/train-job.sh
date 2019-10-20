@@ -9,7 +9,10 @@ shift $n
 set -e
 set -x
 
-#aws s3 sync s3://almond-research/${dataset_owner}/dataset/${experiment}/${dataset}/ data/
+id
+pwd
+ls -al .
+aws s3 sync s3://almond-research/${dataset_owner}/dataset/${experiment}/${dataset}/ data/
 
 python3 myTrain.py "$@"
 
