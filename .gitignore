@@ -21,7 +21,7 @@ trained_models
 yamls
 pytorch_model_*
 __pycache__
-log/
+log*/
 
 # Distribution / packaging
 .Python

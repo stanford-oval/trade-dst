@@ -9,7 +9,7 @@ import os
 import pickle
 from random import shuffle
 
-from utils.config import args, USE_CUDA, PAD_token, SOS_token, EOS_token, UNK_token
+from utils.config import args, PAD_token, SOS_token, EOS_token, UNK_token
 from .fix_label import fix_general_label_error
 
 EXPERIMENT_DOMAINS = ["hotel", "train", "restaurant", "attraction", "taxi"]
@@ -139,7 +139,7 @@ def collate_fn(data):
         for i, seq in enumerate(sequences):
             end = lengths[i]
             padded_seqs[i, :end] = seq[:end]
-        padded_seqs = padded_seqs.detach() #torch.tensor(padded_seqs)
+        padded_seqs = padded_seqs.detach()
         return padded_seqs, lengths
 
     def merge_multi_response(sequences):
@@ -184,12 +184,11 @@ def collate_fn(data):
     gating_label = torch.tensor(item_info["gating_label"])
     turn_domain = torch.tensor(item_info["turn_domain"])
 
-    if USE_CUDA:
-        src_seqs = src_seqs.cuda()
-        gating_label = gating_label.cuda()
-        turn_domain = turn_domain.cuda()
-        y_seqs = y_seqs.cuda()
-        y_lengths = y_lengths.cuda()
+    # src_seqs = src_seqs
+    # gating_label = gating_label
+    # turn_domain = turn_domain
+    # y_seqs = y_seqs
+    # y_lengths = y_lengths
 
     item_info["context"] = src_seqs
     item_info["context_len"] = src_lengths
@@ -442,7 +441,6 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     print("Vocab_size Training %s" % nb_train_vocab )
     print("Vocab_size Belief %s" % mem_lang.n_words )
     print("Max. length of dialog words for RNN: %s " % max_word)
-    print("USE_CUDA={}".format(USE_CUDA))
 
     SLOTS_LIST = [ALL_SLOTS, slot_train, slot_dev, slot_test]
     print("[Train Set & Dev Set Slots]: Number is {} in total".format(str(len(SLOTS_LIST[2]))))
