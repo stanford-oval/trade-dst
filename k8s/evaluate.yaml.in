@@ -36,6 +36,6 @@ spec:
             cpu: 8
             memory: 10G
           requests:
-            cpu: 4
+            cpu: 3.8
             memory: 5G
       tolerations: []
