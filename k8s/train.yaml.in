@@ -35,8 +35,8 @@ spec:
         command: ['/bin/sh', '-c', 'k8s/train-job.sh @@cmdline@@']
         resources:
           limits:
-            cpu: 8
-            memory: 30G
+            cpu: 16
+            memory: 58G
             nvidia.com/gpu: 1
           requests:
             cpu: 4
