@@ -15,5 +15,14 @@ aws s3 sync s3://almond-research/${owner}/models/${experiment}/${model}/ save/
 ls -d save/TRADE*/ || ln -s . save/TRADE
 
 # note: myTest is very, very broken, and assumes a very specific directory layout inside save/
-best_model=$(ls -d save/TRADE*/* | sort -r | head -n1)
-python3 myTest.py -path "$best_model" "$@" >
+best_model=$(ls -d save/TRADE*/HDD*BSZ* | sort -r | head -n1)
+
+echo "Everything" > results
+python3 myTest.py -path "$best_model" "$@" | tee -a results
+
+for d in hotel train restaurant attraction taxi ; do
+  echo "Only" $d >> results
+  python3 myTest.py -path "$best_model" -onlyd "$d" "$@" | tee -a results
+done
+
+aws s3 cp results s3://almond-research/${owner}/models/${experiment}/${model}/results
