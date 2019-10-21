@@ -3,6 +3,7 @@ save/
 sftp-config.json
 data/
 *.pyc
+run.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
