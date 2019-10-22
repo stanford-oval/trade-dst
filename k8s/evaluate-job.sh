@@ -13,6 +13,8 @@ aws s3 sync s3://almond-research/${dataset_owner}/dataset/${experiment}/${datase
 aws s3 sync s3://almond-research/${owner}/models/${experiment}/${model}/ save/
 
 ls -d save/TRADE*/ || ln -s . save/TRADE
+(cd save ; ls lang-all.pkl || ln -s TRADE*/lang-all.pkl lang-all.pkl )
+(cd save ; ls mem-lang-all.pkl || ln -s TRADE*/mem-lang-all.pkl mem-lang-all.pkl )
 
 # note: myTest is very, very broken, and assumes a very specific directory layout inside save/
 best_model=$(ls -d save/TRADE*/HDD*BSZ* | sort -r | head -n1)
