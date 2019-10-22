@@ -19,10 +19,15 @@ best_model=$(ls -d save/TRADE*/HDD*BSZ* | sort -r | head -n1)
 
 echo "Everything" > results
 python3 myTest.py -path "$best_model" "$@" | tee -a results
+aws s3 cp prediction_* s3://almond-research/${owner}/models/${experiment}/${model}/predictions/full/
+aws s3 rm prediction_*
 
 for d in hotel train restaurant attraction taxi ; do
   echo "Only" $d >> results
   python3 myTest.py -path "$best_model" -onlyd "$d" "$@" | tee -a results
+  aws s3 cp prediction_* s3://almond-research/${owner}/models/${experiment}/${model}/predictions/${d}/
+  aws s3 rm prediction_*
 done
 
 aws s3 cp results s3://almond-research/${owner}/models/${experiment}/${model}/results
+

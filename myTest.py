@@ -42,14 +42,14 @@ def run():
 
     if args["run_dev_testing"]:
         print("Development Set ...")
-        acc_dev = model.evaluate(dev, 1e7, SLOTS_LIST[2])
+        acc_dev = model.evaluate(dev, 1e7, SLOTS_LIST[2], save_string="dev")
 
     if args['except_domain']!="" and args["run_except_4d"]:
         print("Test Set on 4 domains...")
-        acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2])
+        acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2], save_string="test_4dom")
 
     print("Test Set ...")
-    acc_test = model.evaluate(test, 1e7, SLOTS_LIST[3])
+    acc_test = model.evaluate(test, 1e7, SLOTS_LIST[3], save_string="test")
 
 if __name__ == '__main__':
     run()

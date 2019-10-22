@@ -172,7 +172,7 @@ class TRADE(nn.Module):
 
         return all_point_outputs, all_gate_outputs, words_point_out, words_class_out
 
-    def evaluate(self, dev, matric_best, slot_temp, early_stop=None):
+    def evaluate(self, dev, matric_best, slot_temp, save_dir="", save_string = "", early_stop=None):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
         self.decoder.train(False)  
@@ -231,7 +231,9 @@ class TRADE(nn.Module):
                     print("Pred", set(predict_belief_bsz_ptr), "\n")  
 
         if args["genSample"]:
-            json.dump(all_prediction, open("all_prediction_{}.json".format(self.name), 'w'), indent=4)
+            if not os.path.exists(save_dir):
+                os.mkdir(save_dir)
+            json.dump(all_prediction, open(os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string)), 'w'), indent=4)
 
         joint_acc_score_ptr, F1_score_ptr, turn_acc_score_ptr = self.evaluate_metrics(all_prediction, "pred_bs_ptr", slot_temp)
 
