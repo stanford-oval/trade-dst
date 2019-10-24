@@ -6,6 +6,7 @@ from tqdm import tqdm
 import shutil
 import os
 import warnings
+import sys
 
 from torch.optim import lr_scheduler
 from transformers.optimization import AdamW, WarmupLinearSchedule
@@ -89,7 +90,8 @@ def run():
         gating_dict=gating_dict,
         t_total=num_train_steps,
         nb_train_vocab=max_word,
-        device=device
+        device=device,
+        n_gpu=n_gpu
         )
     else:
         raise ValueError("Model {} specified does not exist".format(args['decoder']))
@@ -114,11 +116,18 @@ def run():
         pbar = tqdm(enumerate(train), total=len(train))
         for i, data in pbar:
             batch = {}
+            # wrap all numerical values as tensors for multi-gpu training
             for k, v in data.items():
                 if isinstance(v, torch.Tensor):
                     batch[k] = v.to(device)
+                elif isinstance(v, list):
+                    if k in ['ID', 'turn_belief', 'context_plain', 'turn_uttr_plain']:
+                        batch[k] = v
+                    else:
+                        batch[k] = torch.tensor(v).to(device)
                 else:
-                    batch[k] = v
+                    print('v is:', v)
+                    sys.exit(1)
             loss = model(batch, int(args['clip']), SLOTS_LIST[1], reset=(i==0), n_gpu=n_gpu)
 
             if n_gpu > 1:
@@ -129,19 +138,18 @@ def run():
             loss.backward()
 
             if (i + 1) % args['gradient_accumulation_steps'] == 0:
-                # model.optimize(args['clip'])
                 torch.nn.utils.clip_grad_norm_(core.parameters(), args['clip'])
                 core.optimizer.step()
                 if isinstance(core.scheduler, WarmupLinearSchedule):
                     core.scheduler.step()
 
-            # pbar.set_description(core.print_loss()) #TODO
+            pbar.set_description(core.print_loss()) #TODO
 
         if((epoch+1) % int(args['evalp']) == 0):
 
-            acc = model.evaluate(dev, avg_best, SLOTS_LIST[2], early_stop)
+            acc = core.evaluate(dev, avg_best, SLOTS_LIST[2], early_stop)
             if isinstance(core.scheduler, lr_scheduler.ReduceLROnPlateau):
-                core.step(acc)
+                core.scheduler.step(acc)
 
             if(acc >= avg_best):
                 avg_best = acc

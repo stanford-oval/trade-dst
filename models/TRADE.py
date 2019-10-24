@@ -19,7 +19,7 @@ from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from transformers.optimization import AdamW, WarmupLinearSchedule
 
 class TRADE(nn.Module):
-    def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, t_total, device, nb_train_vocab=0):
+    def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, t_total, device, n_gpu, nb_train_vocab=0):
         super(TRADE, self).__init__()
         self.name = "TRADE"
         self.task = task
@@ -49,6 +49,7 @@ class TRADE(nn.Module):
 
             self.encoder.load_state_dict(trained_encoder.state_dict())
             self.decoder.load_state_dict(trained_decoder.state_dict())
+
 
         # Initialize optimizers and criterion
         if args['encoder'] == 'RNN':
@@ -121,11 +122,6 @@ class TRADE(nn.Module):
 
         return self.loss_grad
 
-    # def loss_backward(self):
-
-    
-    # def optimize(self, clip):
-
 
     def optimize_GEM(self, clip):
         torch.nn.utils.clip_grad_norm_(self.parameters(), clip)
@@ -147,7 +143,8 @@ class TRADE(nn.Module):
                 story = data['context']
 
             story = story.to(self.device)
-            encoded_outputs, encoded_hidden = self.encoder(story.transpose(0, 1), data['context_len'])
+            # encoded_outputs, encoded_hidden = self.encoder(story.transpose(0, 1), data['context_len'])
+            encoded_outputs, encoded_hidden = self.encoder(story, data['context_len'])
 
         # Encode dialog history
         # story  32 396
@@ -362,7 +359,7 @@ class EncoderRNN(nn.Module):
         self.device = device
         self.embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=PAD_token)
         self.embedding.weight.data.normal_(0, 0.1)
-        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True)
+        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True, batch_first=True)
         # self.domain_W = nn.Linear(hidden_size, nb_domain)
 
         if args["load_embedding"]:
@@ -384,21 +381,23 @@ class EncoderRNN(nn.Module):
         # Note: we run this all at once (over multiple batches of multiple sequences)
         embedded = self.embedding(input_seqs)
         embedded = self.dropout_layer(embedded)
+        total_length = embedded.size(1)
         # embedded  344, 32, 400
-        hidden = self.get_state(input_seqs.size(1))
+        hidden = self.get_state(input_seqs.size(0))
+        # import pdb; pdb.set_trace()
         #hidden 2, 32, 400
-        # if input_lengths:
-        #     embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=False)
+        if input_lengths is not None:
+            embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=True)
         outputs, hidden = self.gru(embedded, hidden)
-        # if input_lengths:
-        #    outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=False)
+        if input_lengths is not None:
+           outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=True, total_length=total_length)
         # outputs  344, 32, 800
         # They sum hidden and output states from different directions but WHY?! #TODO
         hidden = hidden[0] + hidden[1]
         # hidden 32 400
         outputs = outputs[:,:,:self.hidden_size] + outputs[:,:,self.hidden_size:]
         # outputs  344, 32, 400
-        return outputs.transpose(0,1), hidden.unsqueeze(0)
+        return outputs, hidden.unsqueeze(0)
 
 
 class Generator(nn.Module):
@@ -556,8 +555,10 @@ class Generator(nn.Module):
         """
         attend over the sequences `seq` using the condition `cond`.
         """
+
         scores_ = cond.unsqueeze(1).expand_as(seq).mul(seq).sum(2)
         max_len = max(lens)
+        # import pdb; pdb.set_trace()
         for i, l in enumerate(lens):
             if l < max_len:
                 scores_.data[i, l:] = -np.inf
