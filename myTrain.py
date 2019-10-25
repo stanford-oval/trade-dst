@@ -126,8 +126,8 @@ def run():
                     else:
                         batch[k] = torch.tensor(v).to(device)
                 else:
-                    print('v is:', v)
-                    sys.exit(1)
+                    print('v is: {} and this ignoring {}'.format(v, k))
+
             loss = model(batch, int(args['clip']), SLOTS_LIST[1], reset=(i==0), n_gpu=n_gpu)
 
             if n_gpu > 1:

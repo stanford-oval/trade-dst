@@ -54,7 +54,6 @@ parser.add_argument('-dr', '--drop', help='Drop Out', required=False, type=float
 parser.add_argument('-lm', '--limit', help='Word Limit', required=False, default=-10000)
 parser.add_argument('-clip', '--clip', help='gradient clipping', required=False, default=10, type=int)
 parser.add_argument('-tfr', '--teacher_forcing_ratio', help='teacher_forcing_ratio', type=float, required=False, default=0.5)
-# parser.add_argument('-l','--layer', help='Layer Number', required=False)
 parser.add_argument('-gas', '--gradient_accumulation_steps', help='Number of updates to accumulate before performing an optimization step',
                     type=int, default=1)
 parser.add_argument('--max_epochs', help='maximum number of epochs', required=False, default=200, type=int)
@@ -106,8 +105,7 @@ if args['bert_model'] and 'uncased' in args['bert_model'] and not args['do_lower
     args['do_lower_case'] = True
 
 if args['encoder'] == 'BERT':
-    # args['max_context_length'] = 512 - 30
-    args['max_context_length'] = 100
+    args['max_context_length'] = 512 - 30
 
 
 print(str(args))

@@ -11,6 +11,8 @@ from random import shuffle
 
 from utils.config import args, PAD_token, SOS_token, EOS_token, UNK_token
 from .fix_label import fix_general_label_error
+from utils.data_utils import convert_examples_to_features
+from transformers.tokenization_bert import BertTokenizer
 
 EXPERIMENT_DOMAINS = ["hotel", "train", "restaurant", "attraction", "taxi"]
 
@@ -88,7 +90,7 @@ class Dataset(data.Dataset):
             "context_plain":context_plain, 
             "turn_uttr_plain":turn_uttr, 
             "turn_domain":turn_domain, 
-            "generate_y":generate_y, 
+            "generate_y":generate_y,
             }
         return item_info
 
@@ -128,7 +130,7 @@ class Dataset(data.Dataset):
         return domains[turn_domain]
 
 
-def collate_fn(data):
+def collate_fn(data, tokenizer=None):
     def merge(sequences, is_context=False, plain=False):
         '''
         merge from batch * sent_len to batch * max_len 
@@ -210,11 +212,20 @@ def collate_fn(data):
     gating_label = torch.tensor(item_info["gating_label"])
     turn_domain = torch.tensor(item_info["turn_domain"])
 
-    # src_seqs = src_seqs
-    # gating_label = gating_label
-    # turn_domain = turn_domain
-    # y_seqs = y_seqs
-    # y_lengths = y_lengths
+    # BERT features
+    all_input_ids = None
+    all_input_mask = None
+    all_segment_ids = None
+    all_sub_word_masks = None
+
+    if args['encoder'] == 'BERT':
+        story_plain = item_info['context_plain']
+        max_seq_length = max(src_lengths)
+        features = convert_examples_to_features(story_plain, tokenizer=tokenizer, max_seq_length=max_seq_length)
+        all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
+        all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8)
+        all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long)
+        all_sub_word_masks = torch.tensor([f.sub_word_masks for f in features], dtype=torch.uint8)
 
     item_info["context"] = src_seqs
     item_info["context_plain"] = context_plain_seqs
@@ -223,6 +234,11 @@ def collate_fn(data):
     item_info["turn_domain"] = turn_domain
     item_info["generate_y"] = y_seqs
     item_info["y_lengths"] = y_lengths
+    item_info['all_input_ids'] = all_input_ids
+    item_info['all_input_mask'] = all_input_mask
+    item_info['all_segment_ids'] = all_segment_ids
+    item_info['all_sub_word_masks'] = all_sub_word_masks
+
     return item_info
 
 def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity, training, max_line = None):
@@ -343,7 +359,7 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
     return data, max_resp_len, slot_temp
 
 
-def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity):  
+def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity, tokenizer=None):
     if(type and args['fisher_sample']>0):
         shuffle(pairs)
         pairs = pairs[:args['fisher_sample']]
@@ -363,13 +379,13 @@ def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity):
         data_loader = torch.utils.data.DataLoader(dataset=dataset,
                                                   batch_size=batch_size,
                                                   # shuffle=type,
-                                                  collate_fn=collate_fn,
+                                                  collate_fn=lambda data: collate_fn(data, tokenizer),
                                                   sampler=ImbalancedDatasetSampler(dataset))
     else:
         data_loader = torch.utils.data.DataLoader(dataset=dataset,
                                                   batch_size=batch_size,
                                                   shuffle=type,
-                                                  collate_fn=collate_fn)
+                                                  collate_fn=lambda data: collate_fn(data, tokenizer))
     return data_loader
 
 
@@ -396,6 +412,11 @@ def get_slot_information(ontology):
 
 
 def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
+    if args['encoder'] == 'BERT':
+        tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
+    else:
+        tokenizer = None
+
     eval_batch = args["eval_batch"] if args["eval_batch"] else batch_size
     file_train = 'data/train_dials.json'
     file_dev = 'data/dev_dials.json'
@@ -421,12 +442,12 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
 
     if training:
         pair_train, train_max_len, slot_train = read_langs(file_train, gating_dict, ALL_SLOTS, "train", lang, mem_lang, sequicity, training)
-        train = get_seq(pair_train, lang, mem_lang, batch_size, True, sequicity)
+        train = get_seq(pair_train, lang, mem_lang, batch_size, True, sequicity, tokenizer)
         nb_train_vocab = lang.n_words
         pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
-        dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity)
+        dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
         pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
-        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity)
+        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
         if os.path.exists(folder_name+lang_name) and os.path.exists(folder_name+mem_lang_name):
             print("[Info] Loading saved lang files...")
             with open(folder_name+lang_name, 'rb') as handle: 
@@ -450,14 +471,14 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
 
         pair_train, train_max_len, slot_train, train, nb_train_vocab = [], 0, {}, [], 0
         pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
-        dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity)
+        dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
         pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
-        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity)
+        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
 
     test_4d = []
     if args['except_domain']!="":
         pair_test_4d, _, _ = read_langs(file_test, gating_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
-        test_4d  = get_seq(pair_test_4d, lang, mem_lang, eval_batch, False, sequicity)
+        test_4d  = get_seq(pair_test_4d, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
 
     max_word = max(train_max_len, dev_max_len, test_max_len) + 1
 

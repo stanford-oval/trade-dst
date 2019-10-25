@@ -12,9 +12,7 @@ from tqdm import tqdm
 from utils.masked_cross_entropy import masked_cross_entropy_for_value
 from utils.config import args, PAD_token
 
-from utils.data_utils import convert_examples_to_features
-from transformers.modeling_bert import BertPreTrainedModel, BertModel
-from transformers.tokenization_bert import BertTokenizer
+from transformers.modeling_bert import BertModel
 from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from transformers.optimization import AdamW, WarmupLinearSchedule
 
@@ -150,19 +148,20 @@ class TRADE(nn.Module):
         # story  32 396
         # data['context_len'] 32
         elif args['encoder'] == 'BERT':
+            # import pdb; pdb.set_trace()
             story = data['context']
-            story_plain = data['context_plain']
-            max_seq_lenght = max(data['context_len']).item() if isinstance(data['context_len'], torch.Tensor) else max(data['context_len'])
-            features = convert_examples_to_features(story_plain, tokenizer=self.encoder.tokenizer, max_seq_length=max_seq_lenght)
-            all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long).to(self.device)
-            all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8).to(self.device)
-            all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long).to(self.device)
-            all_sub_word_masks = torch.tensor([f.sub_word_masks for f in features], dtype=torch.uint8).to(self.device)
+            # story_plain = data['context_plain']
+
+            all_input_ids = data['all_input_ids']
+            all_input_mask = data['all_input_mask']
+            all_segment_ids = data['all_segment_ids']
+            all_sub_word_masks = data['all_sub_word_masks']
 
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
 
         # Get the words that can be copied from the memory
+        # import pdb; pdb.set_trace()
         batch_size = len(data['context_len'])
         self.copy_list = data['context_plain']
         max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
@@ -330,7 +329,6 @@ class BERTEncoder(nn.Module):
         # modify config if you want
         bert_config.num_hidden_layers = args['num_bert_layers']
 
-        self.tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
         self.bert = BertModel(bert_config)
 
         # load desired layers from pre-trained model
