@@ -105,8 +105,9 @@ if args['bert_model'] and 'uncased' in args['bert_model'] and not args['do_lower
     print('changing do_lower_case from False to True')
     args['do_lower_case'] = True
 
-if args['bert_model'] == 'BERT':
-    args['max_context_length'] == 512
+if args['encoder'] == 'BERT':
+    # args['max_context_length'] = 512 - 30
+    args['max_context_length'] = 100
 
 
 print(str(args))

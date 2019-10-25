@@ -129,7 +129,7 @@ class Dataset(data.Dataset):
 
 
 def collate_fn(data):
-    def merge(sequences, is_context=False):
+    def merge(sequences, is_context=False, plain=False):
         '''
         merge from batch * sent_len to batch * max_len 
         '''
@@ -137,25 +137,33 @@ def collate_fn(data):
         lengths = [len(seq) for seq in sequences]
         if is_context:
             if args['max_context_length'] == -1:
-                max_len = 1 if max(lengths)==0 else max(lengths)
+                new_sequences = sequences
             else:
                 max_len = args['max_context_length']
-        new_sequences = []
-        for i, seq in enumerate(sequences):
-            if lengths[i] > max_len:
-                new_sequences.append(seq[lengths[i] - max_len:])
-            else:
-                new_sequences.append(seq)
+                new_sequences = []
+                for i, seq in enumerate(sequences):
+                    if lengths[i] > max_len:
+                        new_sequences.append(seq[lengths[i] - max_len:])
+                    else:
+                        new_sequences.append(seq)
 
         new_lengths = [len(seq) for seq in new_sequences]
         max_len = 1 if max(new_lengths)==0 else max(new_lengths)
 
-        padded_seqs = torch.ones(len(new_sequences), max_len).long()
-        for i, seq in enumerate(new_sequences):
-            end = new_lengths[i]
-            padded_seqs[i, :end] = seq[:end]
-        padded_seqs = padded_seqs.detach()
-        return padded_seqs, lengths
+        if plain:
+            final_seqs = []
+            for i, seq in enumerate(new_sequences):
+                end = new_lengths[i]
+                final_seqs.append(seq[:end])
+            return final_seqs, new_lengths
+        else:
+            padded_seqs = torch.ones(len(sequences), max_len).long()
+            for i, seq in enumerate(new_sequences):
+                end = new_lengths[i]
+                padded_seqs[i, :end] = seq[:end]
+
+            padded_seqs = padded_seqs.detach()
+            return padded_seqs, new_lengths
 
     def merge_multi_response(sequences):
         '''
@@ -194,7 +202,10 @@ def collate_fn(data):
         item_info[key] = [d[key] for d in data]
 
     # merge sequences
-    src_seqs, src_lengths = merge(item_info['context'], is_context=True)
+    src_seqs, src_lengths = merge(item_info['context'], is_context=True, plain=False)
+    context_plain_tokens = [item.split(" ") for item in item_info['context_plain']]
+    context_plain_seqs, context_plain_lengths = merge(context_plain_tokens, is_context=True, plain=True)
+    context_plain_seqs = [" ".join(context_plain) for context_plain in context_plain_seqs]
     y_seqs, y_lengths = merge_multi_response(item_info["generate_y"])
     gating_label = torch.tensor(item_info["gating_label"])
     turn_domain = torch.tensor(item_info["turn_domain"])
@@ -206,6 +217,7 @@ def collate_fn(data):
     # y_lengths = y_lengths
 
     item_info["context"] = src_seqs
+    item_info["context_plain"] = context_plain_seqs
     item_info["context_len"] = src_lengths
     item_info["gating_label"] = gating_label
     item_info["turn_domain"] = turn_domain
