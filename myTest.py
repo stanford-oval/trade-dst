@@ -11,6 +11,7 @@ warnings.simplefilter("ignore", UserWarning)
 def run():
 
     directory = args['path'].split("/")
+    print(directory)
     HDD = directory[2].split('HDD')[1].split('BSZ')[0]
     decoder = directory[1].split('-')[0]
     BSZ = int(args['batch']) if args['batch'] else int(directory[2].split('BSZ')[1].split('DR')[0])
@@ -43,14 +44,16 @@ def run():
 
     if args["run_dev_testing"]:
         print("Development Set ...")
-        acc_dev = model.evaluate(dev, 1e7, SLOTS_LIST[2], device='cpu')
+        acc_dev = model.evaluate(dev, 1e7, SLOTS_LIST[2], save_string="dev", device='cpu')
 
     if args['except_domain']!="" and args["run_except_4d"]:
         print("Test Set on 4 domains...")
-        acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2])
+        acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2], save_string="test_4dom")
+
+    # TODO: add test -onlyd instead of doing it in evaluate-job.sh
 
     print("Test Set ...")
-    acc_test = model.evaluate(test, 1e7, SLOTS_LIST[3], device='cpu')
+    acc_test = model.evaluate(test, 1e7, SLOTS_LIST[3], save_string="test", device='cpu')
 
 if __name__ == '__main__':
     run()
