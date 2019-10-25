@@ -84,6 +84,8 @@ parser.add_argument("--num_bert_layers", type=int, default=12, help='num_bert_la
 parser.add_argument("--encoder", type=str, default='RNN', choices=['RNN', 'BERT'], help='type of encoder to use for context')
 parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for distributed training on gpus")
 
+parser.add_argument('-mcl', "--max_context_length", type=int, default=-1, help="maximum length of context should not be larger than 512 when using BERT as encoder")
+
 args = vars(parser.parse_args())
 
 if args["load_embedding"]:
@@ -102,5 +104,9 @@ if args['bert_model'] and 'uncased' in args['bert_model'] and not args['do_lower
     print('do_lower_case should be True if uncased bert models are used')
     print('changing do_lower_case from False to True')
     args['do_lower_case'] = True
+
+if args['bert_model'] == 'BERT':
+    args['max_context_length'] == 512
+
 
 print(str(args))

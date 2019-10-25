@@ -75,8 +75,8 @@ class Dataset(data.Dataset):
         turn_domain = self.preprocess_domain(self.turn_domain[index])
         generate_y = self.generate_y[index]
         generate_y = self.preprocess_slot(generate_y, self.trg_word2id)
-        context = self.dialog_history[index] 
-        context = self.preprocess(context, self.src_word2id)
+        # context = self.dialog_history[index]
+        context = self.preprocess(self.dialog_history[index] , self.src_word2id)
         context_plain = self.dialog_history[index]
         
         item_info = {
@@ -129,15 +129,30 @@ class Dataset(data.Dataset):
 
 
 def collate_fn(data):
-    def merge(sequences):
+    def merge(sequences, is_context=False):
         '''
         merge from batch * sent_len to batch * max_len 
         '''
+
         lengths = [len(seq) for seq in sequences]
-        max_len = 1 if max(lengths)==0 else max(lengths)
-        padded_seqs = torch.ones(len(sequences), max_len).long()
+        if is_context:
+            if args['max_context_length'] == -1:
+                max_len = 1 if max(lengths)==0 else max(lengths)
+            else:
+                max_len = args['max_context_length']
+        new_sequences = []
         for i, seq in enumerate(sequences):
-            end = lengths[i]
+            if lengths[i] > max_len:
+                new_sequences.append(seq[lengths[i] - max_len:])
+            else:
+                new_sequences.append(seq)
+
+        new_lengths = [len(seq) for seq in new_sequences]
+        max_len = 1 if max(new_lengths)==0 else max(new_lengths)
+
+        padded_seqs = torch.ones(len(new_sequences), max_len).long()
+        for i, seq in enumerate(new_sequences):
+            end = new_lengths[i]
             padded_seqs[i, :end] = seq[:end]
         padded_seqs = padded_seqs.detach()
         return padded_seqs, lengths
@@ -179,7 +194,7 @@ def collate_fn(data):
         item_info[key] = [d[key] for d in data]
 
     # merge sequences
-    src_seqs, src_lengths = merge(item_info['context'])
+    src_seqs, src_lengths = merge(item_info['context'], is_context=True)
     y_seqs, y_lengths = merge_multi_response(item_info["generate_y"])
     gating_label = torch.tensor(item_info["gating_label"])
     turn_domain = torch.tensor(item_info["turn_domain"])

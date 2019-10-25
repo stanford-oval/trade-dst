@@ -152,7 +152,8 @@ class TRADE(nn.Module):
         elif args['encoder'] == 'BERT':
             story = data['context']
             story_plain = data['context_plain']
-            features = convert_examples_to_features(story_plain, tokenizer=self.encoder.tokenizer, max_seq_length=max(data['context_len']))
+            max_seq_lenght = max(data['context_len']).item() if isinstance(data['context_len'], torch.Tensor) else max(data['context_len'])
+            features = convert_examples_to_features(story_plain, tokenizer=self.encoder.tokenizer, max_seq_length=max_seq_lenght)
             all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long).to(self.device)
             all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8).to(self.device)
             all_segment_ids = torch.tensor([f.segment_ids for f in features], dtype=torch.long).to(self.device)
