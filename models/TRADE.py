@@ -17,7 +17,7 @@ from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from transformers.optimization import AdamW, WarmupLinearSchedule
 
 class TRADE(nn.Module):
-    def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, t_total, device, n_gpu, nb_train_vocab=0):
+    def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, t_total, device, nb_train_vocab=0):
         super(TRADE, self).__init__()
         self.name = "TRADE"
         self.task = task
@@ -172,7 +172,7 @@ class TRADE(nn.Module):
 
         return all_point_outputs, all_gate_outputs, words_point_out, words_class_out
 
-    def evaluate(self, dev, matric_best, slot_temp, early_stop=None):
+    def evaluate(self, dev, matric_best, slot_temp, device, early_stop=None):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
         self.decoder.train(False)  
@@ -182,9 +182,22 @@ class TRADE(nn.Module):
         pbar = tqdm(enumerate(dev), total=len(dev))
         for j, data_dev in pbar: 
             # Encode and Decode
+            eval_data = {}
+            # wrap all numerical values as tensors for multi-gpu training
+            for k, v in data_dev.items():
+                if isinstance(v, torch.Tensor):
+                    eval_data[k] = v.to(device)
+                elif isinstance(v, list):
+                    if k in ['ID', 'turn_belief', 'context_plain', 'turn_uttr_plain']:
+                        eval_data[k] = v
+                    else:
+                        eval_data[k] = torch.tensor(v).to(device)
+                else:
+                    # print('v is: {} and this ignoring {}'.format(v, k))
+                    pass
             batch_size = len(data_dev['context_len'])
             with torch.no_grad():
-                _, gates, words, class_words = self.encode_and_decode(data_dev, False, slot_temp)
+                _, gates, words, class_words = self.encode_and_decode(eval_data, False, slot_temp)
 
             for bi in range(batch_size):
                 if data_dev["ID"][bi] not in all_prediction.keys():

@@ -126,7 +126,8 @@ def run():
                     else:
                         batch[k] = torch.tensor(v).to(device)
                 else:
-                    print('v is: {} and this ignoring {}'.format(v, k))
+                    # print('v is: {} and this ignoring {}'.format(v, k))
+                    pass
 
             loss = model(batch, int(args['clip']), SLOTS_LIST[1], reset=(i==0), n_gpu=n_gpu)
 
@@ -147,7 +148,7 @@ def run():
 
         if((epoch+1) % int(args['evalp']) == 0):
 
-            acc = core.evaluate(dev, avg_best, SLOTS_LIST[2], early_stop)
+            acc = core.evaluate(dev, avg_best, SLOTS_LIST[2], device, early_stop)
             if isinstance(core.scheduler, lr_scheduler.ReduceLROnPlateau):
                 core.scheduler.step(acc)
 
