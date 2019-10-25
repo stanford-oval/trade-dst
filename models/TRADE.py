@@ -170,8 +170,8 @@ class TRADE(nn.Module):
             encoded_hidden, encoded_outputs, data['context_len'], story, max_res_len, data['generate_y'], \
             use_teacher_forcing, slot_temp)
 
-        return all_point_outputs, all_gate_outputs, words_point_out, words_class_o
-    def evaluate(self, dev, matric_best, slot_temp, save_dir="", save_string = "", device, early_stop=None):
+        return all_point_outputs, all_gate_outputs, words_point_out, words_class_out
+    def evaluate(self, dev, matric_best, slot_temp, device, save_dir="", save_string = "", early_stop=None):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
         self.decoder.train(False)  

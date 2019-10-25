@@ -91,7 +91,6 @@ def run():
         t_total=num_train_steps,
         nb_train_vocab=max_word,
         device=device,
-        n_gpu=n_gpu
         )
     else:
         raise ValueError("Model {} specified does not exist".format(args['decoder']))
