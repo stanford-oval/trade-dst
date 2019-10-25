@@ -48,6 +48,8 @@ def run():
         print("Test Set on 4 domains...")
         acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2], save_string="test_4dom")
 
+    # TODO: add test -onlyd instead of doing it in evaluate-job.sh
+
     print("Test Set ...")
     acc_test = model.evaluate(test, 1e7, SLOTS_LIST[3], save_string="test")
 

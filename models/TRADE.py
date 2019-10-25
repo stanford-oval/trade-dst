@@ -231,9 +231,10 @@ class TRADE(nn.Module):
                     print("Pred", set(predict_belief_bsz_ptr), "\n")  
 
         if args["genSample"]:
-            if not os.path.exists(save_dir):
+            if save_dir is not "" and not os.path.exists(save_dir):
                 os.mkdir(save_dir)
             json.dump(all_prediction, open(os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string)), 'w'), indent=4)
+            print("saved generated samples", os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string)))
 
         joint_acc_score_ptr, F1_score_ptr, turn_acc_score_ptr = self.evaluate_metrics(all_prediction, "pred_bs_ptr", slot_temp)
 
