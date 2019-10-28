@@ -25,8 +25,6 @@ spec:
         iam.amazonaws.com/role: @@IAM_ROLE@@
 
     spec:
-      nodeSelector:
-        beta.kubernetes.io/instance-type: p3.2xlarge
       restartPolicy: Never
       containers:
       - name: main

@@ -3,6 +3,7 @@ save/
 sftp-config.json
 data/
 *.pyc
+run.sh
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
@@ -21,7 +22,7 @@ trained_models
 yamls
 pytorch_model_*
 __pycache__
-log/
+log*/
 
 # Distribution / packaging
 .Python

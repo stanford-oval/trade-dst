@@ -36,22 +36,24 @@ def run():
             dropout=0,
             slots=SLOTS_LIST,
             gating_dict=gating_dict,
+            t_total=-1,
+            device='cpu',
             nb_train_vocab=max_word)
     else:
         raise ValueError("Model {} specified does not exist".format(args['decoder']))
 
     if args["run_dev_testing"]:
         print("Development Set ...")
-        acc_dev = model.evaluate(dev, 1e7, SLOTS_LIST[2], save_string="dev")
+        acc_dev = model.evaluate(dev, 1e7, SLOTS_LIST[2], device='cpu', save_string="dev")
 
     if args['except_domain']!="" and args["run_except_4d"]:
         print("Test Set on 4 domains...")
-        acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2], save_string="test_4dom")
+        acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2], device='cpu', save_string="test_4dom")
 
     # TODO: add test -onlyd instead of doing it in evaluate-job.sh
 
     print("Test Set ...")
-    acc_test = model.evaluate(test, 1e7, SLOTS_LIST[3], save_string="test")
+    acc_test = model.evaluate(test, 1e7, SLOTS_LIST[3], device='cpu', save_string="test")
 
 if __name__ == '__main__':
     run()

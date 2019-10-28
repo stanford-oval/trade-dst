@@ -1,18 +1,11 @@
 import argparse
-import torch
 
 PAD_token = 1
 SOS_token = 3
 EOS_token = 2
 UNK_token = 0
 
-if torch.cuda.is_available():
-    USE_CUDA = True
-else:
-    USE_CUDA = False
-
 MAX_LENGTH = 10
-
 
 def str2bool(v):
     if isinstance(v, bool):
@@ -60,9 +53,11 @@ parser.add_argument('-lr', '--learn', help='Learning Rate', required=False, type
 parser.add_argument('-dr', '--drop', help='Drop Out', required=False, type=float)
 parser.add_argument('-lm', '--limit', help='Word Limit', required=False, default=-10000)
 parser.add_argument('-clip', '--clip', help='gradient clipping', required=False, default=10, type=int)
-parser.add_argument('-tfr', '--teacher_forcing_ratio', help='teacher_forcing_ratio', type=float, required=False,
-                    default=0.5)
-# parser.add_argument('-l','--layer', help='Layer Number', required=False)
+parser.add_argument('-tfr', '--teacher_forcing_ratio', help='teacher_forcing_ratio', type=float, required=False, default=0.5)
+parser.add_argument('-gas', '--gradient_accumulation_steps', help='Number of updates to accumulate before performing an optimization step',
+                    type=int, default=1)
+parser.add_argument('--max_epochs', help='maximum number of epochs', required=False, default=200, type=int)
+parser.add_argument('-wp', "--warmup_proportion", default=0.1, type=float, help="Proportion of training to perform linear learning rate warmup for")
 
 # Unseen Domain Setting
 parser.add_argument('-l_ewc', '--lambda_ewc', help='regularization term for EWC loss', type=float, required=False,
@@ -86,8 +81,12 @@ parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-train
 parser.add_argument("--do_lower_case", type=str2bool, default=False, help="Set this flag if you are using an uncased model.")
 parser.add_argument("--num_bert_layers", type=int, default=12, help='num_bert_layers to use in our model')
 parser.add_argument("--encoder", type=str, default='RNN', choices=['RNN', 'BERT'], help='type of encoder to use for context')
+parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for distributed training on gpus")
+
+parser.add_argument('-mcl', "--max_context_length", type=int, default=-1, help="maximum length of context should not be larger than 512 when using BERT as encoder")
 
 args = vars(parser.parse_args())
+
 if args["load_embedding"]:
     args["hidden"] = 400
     print("[Warning] Using hidden size = 400 for pretrained word embedding (300 + 100)...")
@@ -97,5 +96,16 @@ if args["except_domain"] != "":
     args["addName"] += "Except" + args["except_domain"]
 if args["only_domain"] != "":
     args["addName"] += "Only" + args["only_domain"]
+
+args['batch'] = int(args['batch'] / args['gradient_accumulation_steps'])
+
+if args['bert_model'] and 'uncased' in args['bert_model'] and not args['do_lower_case']:
+    print('do_lower_case should be True if uncased bert models are used')
+    print('changing do_lower_case from False to True')
+    args['do_lower_case'] = True
+
+if args['encoder'] == 'BERT':
+    args['max_context_length'] = 512 - 30
+
 
 print(str(args))
