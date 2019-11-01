@@ -1,7 +1,8 @@
-from utils.config import *
-from models.TRADE import *
+from utils.config import args
 from copy import deepcopy
+import warnings
 
+warnings.simplefilter("ignore", UserWarning)
 
 except_domain = args['except_domain']
 directory = args['path'].split("/")
@@ -11,7 +12,7 @@ args["decoder"] = "TRADE"
 args["HDD"] = HDD
 
 if args['dataset']=='multiwoz':
-    from utils.utils_multiWOZ_DST import *
+    from utils.utils_multiWOZ_DST import prepare_data_seq
 else:
     print("You need to provide the --dataset information")
 

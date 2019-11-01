@@ -1,0 +1,41 @@
+# -*- mode: yaml -*-
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: @@JOB_NAME@@
+  namespace: research
+  labels:
+    app: trade-dst
+    owner: @@OWNER@@
+    job-type: evaluate
+
+spec:
+  completions: 1
+  parallelism: 1
+  backoffLimit: 0
+
+  template:
+    metadata:
+      namespace: research
+      labels:
+        app: trade-dst
+        owner: @@OWNER@@
+        job-type: evaluate
+      annotations:
+        iam.amazonaws.com/role: @@IAM_ROLE@@
+
+    spec:
+      restartPolicy: Never
+      containers:
+      - name: main
+        image: @@IMAGE@@
+        imagePullPolicy: Always
+        command: ['/bin/sh', '-c', 'k8s/evaluate-job.sh @@cmdline@@']
+        resources:
+          limits:
+            cpu: 8
+            memory: 10G
+          requests:
+            cpu: 3.8
+            memory: 5G
+      tolerations: []

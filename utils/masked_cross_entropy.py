@@ -1,9 +1,6 @@
-import torch
 from torch.nn import functional
-from torch.autograd import Variable
-from utils.config import *
+import torch
 import torch.nn as nn
-import numpy as np
 
 def sequence_mask(sequence_length, max_len=None):
     if max_len is None:
@@ -11,7 +8,6 @@ def sequence_mask(sequence_length, max_len=None):
     batch_size = sequence_length.size(0)
     seq_range = torch.arange(0, max_len).long()
     seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, max_len)
-    seq_range_expand = Variable(seq_range_expand)
     if sequence_length.is_cuda:
         seq_range_expand = seq_range_expand.cuda()
     seq_length_expand = (sequence_length.unsqueeze(1)
@@ -25,7 +21,7 @@ def cross_entropy(logits, target):
     loss = losses_flat.sum() / batch_size
     return loss
 
-def masked_cross_entropy(logits, target, length):
+def masked_cross_entropy(logits, target, length, device):
     """
     Args:
         logits: A Variable containing a FloatTensor of size
@@ -40,10 +36,7 @@ def masked_cross_entropy(logits, target, length):
     Returns:
         loss: An average loss value masked by the length.
     """
-    if USE_CUDA:
-        length = Variable(torch.LongTensor(length)).cuda()
-    else:
-        length = Variable(torch.LongTensor(length))    
+    length = torch.LongTensor(length).to(device)
 
     # logits_flat: (batch * max_len, num_classes)
     logits_flat = logits.view(-1, logits.size(-1)) ## -1 means infered from other dimentions
@@ -66,10 +59,8 @@ def masked_binary_cross_entropy(logits, target, length):
     logits: (batch, max_len, num_class)
     target: (batch, max_len, num_class)
     '''
-    if USE_CUDA:
-        length = Variable(torch.LongTensor(length)).cuda()
-    else:
-        length = Variable(torch.LongTensor(length))  
+    length = torch.LongTensor(length).to(device)
+
     bce_criterion = nn.BCEWithLogitsLoss()
     loss = 0
     for bi in range(logits.size(0)):
@@ -80,12 +71,9 @@ def masked_binary_cross_entropy(logits, target, length):
     return loss
 
 
-def masked_cross_entropy_(logits, target, length, take_log=False):
-    if USE_CUDA:
-        length = Variable(torch.LongTensor(length)).cuda()
-    else:
-        length = Variable(torch.LongTensor(length))    
+def masked_cross_entropy_(logits, target, length, device, take_log=False):
 
+    length = torch.LongTensor(length).to(device)
     # logits_flat: (batch * max_len, num_classes)
     logits_flat = logits.view(-1, logits.size(-1)) ## -1 means infered from other dimentions
     if take_log:
@@ -102,11 +90,10 @@ def masked_cross_entropy_(logits, target, length, take_log=False):
     loss = losses.sum() / length.float().sum()
     return loss
 
-def masked_coverage_loss(coverage, attention, length):
-    if USE_CUDA:
-        length = Variable(torch.LongTensor(length)).cuda()
-    else:
-        length = Variable(torch.LongTensor(length))    
+def masked_coverage_loss(coverage, attention, length, device):
+
+    length = torch.LongTensor(length).to(device)
+
     mask = sequence_mask(sequence_length=length) 
     min_ = torch.min(coverage, attention)
     mask = mask.unsqueeze(2).expand_as(min_)

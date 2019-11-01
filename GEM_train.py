@@ -1,9 +1,5 @@
-from utils.config import *
-from models.TRADE import *
-import numpy as np
+from utils.config import args, USE_CUDA
 import torch
-import torch.nn as nn
-import torch.optim as optim
 import numpy as np
 import quadprog
 from copy import deepcopy

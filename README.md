@@ -63,6 +63,10 @@ Training
 ```console
 ❱❱❱ python3 myTrain.py -dec=TRADE -bsz=32 -dr=0.2 -lr=0.001 -le=1
 ```
+Training on kubernetes
+```console
+❱❱❱ ./k8s/train.sh --experiment multiwoz --dataset baseline --model baseline -- -dec=TRADE -bsz=32 -dr=0.2 -lr=0.001 -le=1
+```
 Testing
 ```console
 ❱❱❱ python3 myTest.py -path=${save_path}
@@ -75,6 +79,13 @@ Testing
 
 > [2019.08 Update] Now the decoder can generate all the (domain, slot) pairs in one batch at the same time to speedup decoding process. If you face any memory error, you can set flag "--parallel_decode=0" to decode each  (domain, slot) pair one-by-one.
 
+Testing using kubernetes
+```
+❱❱❱ ./k8s/evaluate.sh --experiment multiwoz --dataset baseline --model <model_name> -- --genSample=1
+```
+* --genSample: save results of inference to a file
+
+
 
 ## Unseen Domain DST
 
@@ -83,6 +94,11 @@ Training
 ```console
 ❱❱❱ python3 myTrain.py -dec=TRADE -bsz=32 -dr=0.2 -lr=0.001 -le=1 -exceptd=${domain}
 ```
+Training on kubernetes
+```console
+❱❱❱ ./k8s/train.sh --experiment multiwoz --dataset baseline --model except${domain} -- -dec=TRADE -bsz=32 -dr=0.2 -lr=0.001 -le=1 -exceptd ${domain}
+```
+
 Testing
 ```console
 ❱❱❱ python3 myTest.py -path=${save_path} -exceptd=${domain}
