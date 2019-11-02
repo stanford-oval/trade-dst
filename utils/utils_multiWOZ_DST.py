@@ -430,7 +430,7 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     if not os.path.exists(folder_name): 
         os.makedirs(folder_name)
     # load domain-slot pairs from ontology
-    ontology = json.load(open("data/multi-woz/MULTIWOZ2 2/ontology.json", 'r'))
+    ontology = json.load(open("data/multi-woz/MULTIWOZ2.1/ontology.json", 'r'))
     ALL_SLOTS = get_slot_information(ontology)
     gating_dict = {"ptr":0, "dontcare":1, "none":2}
     # Vocabulary
