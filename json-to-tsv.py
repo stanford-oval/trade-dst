@@ -39,6 +39,8 @@ def belief_state_to_string(belief_state, history):
         else:
             slot_str.append('" ' + slot_value + ' "')
 
+    if len(slot_str) == 0:
+        return 'none'
     return ' '.join(slot_str)
 
 for dialogue in data:
@@ -55,7 +57,7 @@ for dialogue in data:
 
     dialogue['dialogue'].sort(key=lambda x: x['turn_idx'])
 
-    context = ''
+    context = 'none'
     history = ''
 
     for turn in dialogue['dialogue']:
