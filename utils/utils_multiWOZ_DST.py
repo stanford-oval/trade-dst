@@ -422,9 +422,9 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
         tokenizer = None
 
     eval_batch = args["eval_batch"] if args["eval_batch"] else batch_size
-    file_train = 'data/train_dials.json'
-    file_dev = 'data/dev_dials.json'
-    file_test = 'data/test_dials.json'
+    file_train = args['data_dir'] + '/train_dials.json'
+    file_dev = args['data_dir'] + '/dev_dials.json'
+    file_test = args['data_dir'] + '/test_dials.json'
     # Create saving folder
     if args['path']:
         folder_name = args['path'].rsplit('/', 2)[0] + '/'
@@ -434,7 +434,7 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     if not os.path.exists(folder_name): 
         os.makedirs(folder_name)
     # load domain-slot pairs from ontology
-    ontology = json.load(open("data/multi-woz/MULTIWOZ2.1/ontology.json", 'r'))
+    ontology = json.load(open(args['data_dir'] + "/multi-woz/MULTIWOZ2.1/ontology.json", 'r'))
     ALL_SLOTS = get_slot_information(ontology)
     gating_dict = {"ptr":0, "dontcare":1, "none":2}
     # Vocabulary
@@ -464,7 +464,7 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
                 pickle.dump(lang, handle)
             with open(folder_name+mem_lang_name, 'wb') as handle: 
                 pickle.dump(mem_lang, handle)
-        emb_dump_path = 'data/emb{}.json'.format(len(lang.index2word))
+        emb_dump_path = args['data_dir'] + '/emb{}.json'.format(len(lang.index2word))
         if not os.path.exists(emb_dump_path) and args["load_embedding"]:
             dump_pretrained_emb(lang.word2index, lang.index2word, emb_dump_path)
     else:
