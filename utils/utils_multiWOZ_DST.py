@@ -264,12 +264,16 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
             dialog_history = ""
             last_belief_dict = {}
             # Filtering and counting domains
+            filter_domain = False
             for domain in dial_dict["domains"]:
                 if domain not in EXPERIMENT_DOMAINS:
-                    continue
+                    filter_domain = True
+                    break
                 if domain not in domain_counter.keys():
                     domain_counter[domain] = 0
                 domain_counter[domain] += 1
+            if filter_domain:
+                continue
 
             # Unseen domain setting
             if args["only_domain"] != "" and args["only_domain"] not in dial_dict["domains"]:
