@@ -11,7 +11,6 @@ set -x
 
 aws s3 sync s3://almond-research/${dataset_owner}/dataset/${experiment}/${dataset}/ data/
 aws s3 sync s3://almond-research/${owner}/models/${experiment}/${model}/ save/
-docker ps -a
 ls -d save/TRADE*/ || ln -s . save/TRADE
 (cd save ; ls lang-all.pkl || ln -s TRADE*/lang-all.pkl lang-all.pkl )
 (cd save ; ls mem-lang-all.pkl || ln -s TRADE*/mem-lang-all.pkl mem-lang-all.pkl )
