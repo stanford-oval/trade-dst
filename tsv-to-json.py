@@ -142,6 +142,8 @@ for dialogue in dialogues.values():
                 turn_label[key] = turn['belief_state'][key]
                 domain, slot_name = key.split('-', maxsplit=1)
                 turn['domain'] = domain
+        if turn['domain'] == '' and len(dialogue['domains']) > 0:
+            turn['domain'] = dialogue['domains'][0]
 
         turn_label = [[k, v] for k, v in turn_label.items()]
         turn['turn_label'] = turn_label
@@ -149,4 +151,4 @@ for dialogue in dialogues.values():
         turn['belief_state'] = belief_to_json(turn['belief_state'])
 
 print(len(dialogues), file=sys.stderr)
-json.dump(list(dialogues.values()), sys.stdout, indent=2)
+json.dump(list(dial for dial in dialogues.values() if len(dial['domains']) > 0), sys.stdout, indent=2)
