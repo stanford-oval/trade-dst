@@ -101,7 +101,7 @@ if args["only_domain"] != "":
 
 args['batch'] = int(args['batch'] / args['gradient_accumulation_steps'])
 
-if args['bert_model'] and 'uncased' in args['bert_model'] and not args['do_lower_case']:
+if args['encoder'] == 'BERT' and 'uncased' in args['bert_model'] and not args['do_lower_case']:
     print('do_lower_case should be True if uncased bert models are used')
     print('changing do_lower_case from False to True')
     args['do_lower_case'] = True

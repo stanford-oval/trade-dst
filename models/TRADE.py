@@ -114,7 +114,7 @@ class TRADE(nn.Module):
         self.loss_ptr_to_bp = loss_ptr
         
         # Update parameters with optimizers
-        self.loss += loss.data
+        self.loss += loss.item()
         self.loss_ptr += loss_ptr.item()
         self.loss_gate += loss_gate.item()
 
@@ -171,6 +171,7 @@ class TRADE(nn.Module):
             use_teacher_forcing, slot_temp)
 
         return all_point_outputs, all_gate_outputs, words_point_out, words_class_out
+
     def evaluate(self, dev, matric_best, slot_temp, device, save_dir="", save_string = "", early_stop=None):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
@@ -484,9 +485,7 @@ class Generator(nn.Module):
     def forward(self, batch_size, encoded_hidden, encoded_outputs, encoded_lens, story, max_res_len, target_batches, use_teacher_forcing, slot_temp):
         all_point_outputs = torch.zeros(len(slot_temp), batch_size, max_res_len, self.vocab_size, device=self.device)
         all_gate_outputs = torch.zeros(len(slot_temp), batch_size, self.nb_gate, device=self.device)
-        all_point_outputs = all_point_outputs.to(self.device)
-        all_gate_outputs = all_gate_outputs.to(self.device)
-        
+
         # Get the slot embedding 
         slot_emb_dict = {}
         for i, slot in enumerate(slot_temp):
@@ -615,17 +614,3 @@ class Generator(nn.Module):
         scores_ = cond.matmul(seq.transpose(1,0))
         scores = F.softmax(scores_, dim=1)
         return scores
-
-
-class AttrProxy(object):
-    """
-    Translates index lookups into attribute lookups.
-    To implement some trick which able to use list of nn.Module in a nn.Module
-    see https://discuss.pytorch.org/t/list-of-nn-module-in-a-nn-module/219/2
-    """
-    def __init__(self, module, prefix):
-        self.module = module
-        self.prefix = prefix
-
-    def __getitem__(self, i):
-        return getattr(self.module, self.prefix + str(i))
