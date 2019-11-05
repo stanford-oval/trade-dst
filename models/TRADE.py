@@ -448,10 +448,30 @@ class Generator(nn.Module):
         self.W_gate = nn.Linear(hidden_size, nb_gate)
 
         # Create independent slot embeddings
+        if args['pretrain_domain_embeddings']:
+            self.domain_w2i = {}
+
+            with open(os.path.join("data/", 'emb{}.json'.format(vocab_size))) as f:
+                E = json.load(f)
+
+            domains = list(set(slot.split('-')[0] for slot in self.slots))
+            domains.sort()
+
+            self.domain_emb = []
+            for domain in domains:
+                domain_idx = len(self.domain_w2i)
+                self.domain_w2i[domain] = domain_idx
+                domain_emb = E[self.lang.word2index[domain]]
+                self.domain_emb.append(torch.tensor([domain_emb], device=self.device, requires_grad=False))
+
+            self.domain_emb = torch.cat(self.domain_emb)
+            print('Using pretrained domain embedding', self.domain_emb.size())
+
         self.slot_w2i = {}
         for slot in self.slots:
-            if slot.split("-")[0] not in self.slot_w2i.keys():
-                self.slot_w2i[slot.split("-")[0]] = len(self.slot_w2i)
+            if not args['pretrain_domain_embeddings']:
+                if slot.split("-")[0] not in self.slot_w2i.keys():
+                    self.slot_w2i[slot.split("-")[0]] = len(self.slot_w2i)
             if slot.split("-")[1] not in self.slot_w2i.keys():
                 self.slot_w2i[slot.split("-")[1]] = len(self.slot_w2i)
         self.Slot_emb = nn.Embedding(len(self.slot_w2i), hidden_size)
@@ -467,17 +487,24 @@ class Generator(nn.Module):
         slot_emb_dict = {}
         for i, slot in enumerate(slot_temp):
             # Domain embbeding
-            if slot.split("-")[0] in self.slot_w2i.keys():
+            if args['pretrain_domain_embeddings']:
+                assert slot.split("-")[0] in self.domain_w2i.keys()
+                domain_w2idx = [self.domain_w2i[slot.split("-")[0]]]
+                domain_w2idx = torch.tensor(domain_w2idx)
+                domain_w2idx = domain_w2idx.to(self.device)
+                domain_emb = self.domain_emb[domain_w2idx]
+            else:
+                assert slot.split("-")[0] in self.slot_w2i.keys()
                 domain_w2idx = [self.slot_w2i[slot.split("-")[0]]]
                 domain_w2idx = torch.tensor(domain_w2idx)
                 domain_w2idx = domain_w2idx.to(self.device)
                 domain_emb = self.Slot_emb(domain_w2idx)
             # Slot embbeding
-            if slot.split("-")[1] in self.slot_w2i.keys():
-                slot_w2idx = [self.slot_w2i[slot.split("-")[1]]]
-                slot_w2idx = torch.tensor(slot_w2idx)
-                slot_w2idx = slot_w2idx.to(self.device)
-                slot_emb = self.Slot_emb(slot_w2idx)
+            assert slot.split("-")[1] in self.slot_w2i.keys()
+            slot_w2idx = [self.slot_w2i[slot.split("-")[1]]]
+            slot_w2idx = torch.tensor(slot_w2idx)
+            slot_w2idx = slot_w2idx.to(self.device)
+            slot_emb = self.Slot_emb(slot_w2idx)
 
             # Combine two embeddings as one query
             combined_emb = domain_emb + slot_emb
