@@ -238,9 +238,9 @@ class TRADE(nn.Module):
 
                 all_prediction[data_dev["ID"][bi]][data_dev["turn_id"][bi]]["pred_bs_ptr"] = predict_belief_bsz_ptr
 
-                if set(data_dev["turn_belief"][bi]) != set(predict_belief_bsz_ptr) and args["genSample"]:
-                    print("True", set(data_dev["turn_belief"][bi]) )
-                    print("Pred", set(predict_belief_bsz_ptr), "\n")  
+                #if set(data_dev["turn_belief"][bi]) != set(predict_belief_bsz_ptr) and args["genSample"]:
+                #    print("True", set(data_dev["turn_belief"][bi]) )
+                #    print("Pred", set(predict_belief_bsz_ptr), "\n")
 
         if args["genSample"]:
             if save_dir is not "" and not os.path.exists(save_dir):
