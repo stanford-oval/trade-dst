@@ -439,6 +439,7 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     mem_lang.index_words(ALL_SLOTS, 'slot')
     lang_name = 'lang-all.pkl' if args["all_vocab"] else 'lang-train.pkl'
     mem_lang_name = 'mem-lang-all.pkl' if args["all_vocab"] else 'mem-lang-train.pkl'
+    import pdb; pdb.set_trace()
 
     if training:
         pair_train, train_max_len, slot_train = read_langs(file_train, gating_dict, ALL_SLOTS, "train", lang, mem_lang, sequicity, training)
