@@ -451,20 +451,24 @@ class Generator(nn.Module):
         if args['pretrain_domain_embeddings']:
             self.domain_w2i = {}
 
-            with open(os.path.join("data/", 'emb{}.json'.format(vocab_size))) as f:
-                E = json.load(f)
-
             domains = list(set(slot.split('-')[0] for slot in self.slots))
             domains.sort()
-
-            self.domain_emb = []
             for domain in domains:
-                domain_idx = len(self.domain_w2i)
-                self.domain_w2i[domain] = domain_idx
-                domain_emb = E[self.lang.word2index[domain]]
-                self.domain_emb.append(torch.tensor([domain_emb], device=self.device, requires_grad=False))
+                self.domain_w2i[domain] = len(self.domain_w2i)
 
-            self.domain_emb = torch.cat(self.domain_emb)
+            if args["load_embedding"]:
+                with open(os.path.join("data/", 'emb{}.json'.format(vocab_size))) as f:
+                    E = json.load(f)
+
+                self.domain_emb = []
+                for domain in domains:
+                    domain_idx = self.domain_w2i[domain]
+                    domain_emb = E[self.lang.word2index[domain]]
+                    self.domain_emb.append(torch.tensor([domain_emb], device=self.device, requires_grad=False))
+                self.domain_emb = torch.cat(self.domain_emb)
+            else:
+                self.domain_emb = torch.zeros((len(domains), hidden_size), requires_grad=False)
+
             print('Using pretrained domain embedding', self.domain_emb.size())
 
         self.slot_w2i = {}
