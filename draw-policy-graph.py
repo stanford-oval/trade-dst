@@ -25,30 +25,34 @@ def fix_none_typo(value):
 
 def get_node_key_slot_names(label_dict):
     slots = []
+    domains = set()
 
     for slot_key, slot_value in label_dict.items():
         slot_value = fix_none_typo(slot_value)
         if slot_value == 'none':
             continue
+        domains.add(slot_key.split('-')[0])
         slots.append(slot_key.replace(' ', '-'))
 
     if len(slots) == 0:
-        return 'none'
+        return 'none', 'none'
 
-    return ','.join(slots)
+    return ','.join(domains), ','.join(slots)
 def get_node_key_slot_names_delta(turn_label):
     slots = []
+    domains = set()
 
     for slot_key, slot_value in turn_label:
         slot_value = fix_none_typo(slot_value)
         if slot_value == 'none':
             continue
+        domains.add(slot_key.split('-')[0])
         slots.append(slot_key.replace(' ', '-'))
 
     if len(slots) == 0:
-        return 'none'
+        return 'none', 'none'
 
-    return ','.join(slots)
+    return ','.join(domains), ','.join(slots)
 def get_node_key_slot_counts(label_dict):
     slots = Counter()
 
@@ -112,7 +116,7 @@ def load_data():
     with open(filename) as fp:
         data = json.load(fp)
 
-    nodes = set()
+    nodes = Counter()
     edges = Counter()
 
     for dialogue in data:
@@ -120,10 +124,13 @@ def load_data():
         for turn in dialogue['dialogue']:
             label_dict = fix_general_label_error(turn['belief_state'], False, ALL_SLOTS)
 
-            #node_key = get_node_key(label_dict)
+            #domains, node_key = get_node_key_slot_names(label_dict)
+            domains, node_key = get_node_key_slot_names_delta(turn['turn_label'])
+            if domains not in ('none', 'restaurant'):
+                continue
             #node_key = get_node_key_domains_delta(turn['turn_label'])
-            node_key = get_node_key_slot_domains(label_dict)
-            nodes.add(node_key)
+            #node_key = get_node_key_slot_domains(label_dict)
+            nodes[node_key] += 1
             edges[(prev_node_key, node_key)] += 1
 
             if prev_node_key == 'train' and node_key == 'attraction':
@@ -139,15 +146,19 @@ def main():
     print('strict digraph states {')
 
     node_num = dict()
-    for i, node in enumerate(sorted(nodes)):
-        if ',' in node:
-            continue
+    for i, (node, node_count) in enumerate(nodes.most_common()):
+        #if ',' in node:
+        #    continue
         node_num[node] = i
-        print(f's{i} [label="{node}"];')
+
+        node_label = node.replace('restaurant-', '')
+
+        #node_count = nodes[node]
+        print(f's{i} [label="{node_label}"]; # {node_count}')
 
     for (_from, _to), count in edges.items():
-        if ',' in _from or ',' in _to:
-            continue
+        #if ',' in _from or ',' in _to:
+        #    continue
 
         print(f's{node_num[_from]} -> s{node_num[_to]} [label="{count}"];')
 
