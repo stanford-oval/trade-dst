@@ -16,30 +16,56 @@ from transformers.tokenization_bert import BertTokenizer
 
 EXPERIMENT_DOMAINS = ["hotel", "train", "restaurant", "attraction", "taxi"]
 
-class Lang:
-    def __init__(self):
+
+class Tokenizer(object):
+    def __init__(self, type):
+        self.type = type
+        if type == 'BERT':
+            self.tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
+        elif type == 'Word':
+            if args['do_lower_case']:
+                self.tokenizer = lambda seq: seq.split(" ").lower()
+            else:
+                self.tokenizer = lambda seq: seq.split(" ")
+
+    def encode(self, seq):
+        if self.type == 'BERT':
+            return self.tokenizer.tokenize(seq)
+        elif self.type == 'Word':
+            return self.tokenizer(seq)
+
+
+class Lang(object):
+    def __init__(self, tokenizer):
+        self.tokenizer = tokenizer
         self.word2index = {}
-        self.index2word = {PAD_token: "PAD", SOS_token: "SOS", EOS_token: "EOS", UNK_token: 'UNK'}
+        if isinstance(tokenizer, BertTokenizer):
+            UNK_token, PAD_token, SEP_token, MASK_token, CLS_token = 0, 1, 2, 3, 4
+            self.index2word = {SEP_token: '[SEP]', MASK_token: '[MASK]', CLS_token: '[CLS]', UNK_token: '[UNK]', PAD_token: '[PAD]'}
+        else:
+
+            UNK_token, PAD_token, EOS_token, SOS_token = 0, 1, 2, 3
+            self.index2word = {PAD_token: "PAD", SOS_token: "SOS", EOS_token: "EOS", UNK_token: 'UNK'}
         self.n_words = len(self.index2word) # Count default tokens
         self.word2index = dict([(v, k) for k, v in self.index2word.items()])
-      
+
     def index_words(self, sent, type):
         if type == 'utter':
-            for word in sent.split(" "):
+            for word in self.tokenizer.encode(sent):
                 self.index_word(word)
         elif type == 'slot':
             for slot in sent:
                 d, s = slot.split("-")
                 self.index_word(d)
-                for ss in s.split(" "):
+                for ss in self.tokenizer.encode(s):
                     self.index_word(ss)
         elif type == 'belief':
             for slot, value in sent.items():
                 d, s = slot.split("-")
                 self.index_word(d)
-                for ss in s.split(" "):
+                for ss in self.tokenizer.encode(s):
                     self.index_word(ss)
-                for v in value.split(" "):
+                for v in self.tokenizer.encode(value):
                     self.index_word(v)
 
     def index_word(self, word):
@@ -130,6 +156,7 @@ class Dataset(data.Dataset):
 
 
 def collate_fn(data, tokenizer=None):
+
     def merge(sequences, is_context=False, plain=False):
         '''
         merge from batch * sent_len to batch * max_len 
@@ -242,7 +269,7 @@ def collate_fn(data, tokenizer=None):
 
     return item_info
 
-def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity, training, max_line = None):
+def read_langs(file_name, tokenizer, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity, training, max_line = None):
     print(("Reading from {}".format(file_name)))
     data = []
     max_resp_len, max_value_len = 0, 0
@@ -418,9 +445,10 @@ def get_slot_information(ontology):
 
 def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     if args['encoder'] == 'BERT':
-        tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
+        tokenizer = Tokenizer('BERT')
+        mem_tokenizer = tokenizer
     else:
-        tokenizer = None
+        tokenizer = Tokenizer('Word')
 
     eval_batch = args["eval_batch"] if args["eval_batch"] else batch_size
     file_train = args['data_dir'] + '/train_dials.json'
@@ -439,7 +467,7 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     ALL_SLOTS = get_slot_information(ontology)
     gating_dict = {"ptr":0, "dontcare":1, "none":2}
     # Vocabulary
-    lang, mem_lang = Lang(), Lang()
+    lang, mem_lang = Lang(tokenizer), Lang(mem_tokenizer)
     lang.index_words(ALL_SLOTS, 'slot')
     mem_lang.index_words(ALL_SLOTS, 'slot')
     lang_name = 'lang-all.pkl' if args["all_vocab"] else 'lang-train.pkl'

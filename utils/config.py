@@ -5,6 +5,10 @@ SOS_token = 3
 EOS_token = 2
 UNK_token = 0
 
+SEP_token = 4
+MASK_token = 5
+CLS_token = 6
+
 MAX_LENGTH = 10
 
 def str2bool(v):
@@ -46,6 +50,7 @@ parser.add_argument('-le', '--load_embedding', help='', required=False, default=
 parser.add_argument('-femb', '--fix_embedding', help='', required=False, default=0, type=int)
 parser.add_argument('-paral', '--parallel_decode', help='', required=False, default=1, type=int)
 parser.add_argument('--pretrain_domain_embeddings', help='', required=False, default=False, action='store_true')
+parser.add_argument('--merge_embed', help='merging strategy to combine slot and domain embeddings', required=False, default='sum', choices=['sum', 'mean', 'concat'])
 
 # Model Hyper-Parameters
 parser.add_argument('-dec', '--decoder', help='decoder model', required=False)

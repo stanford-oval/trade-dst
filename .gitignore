@@ -23,6 +23,8 @@ yamls
 pytorch_model_*
 __pycache__
 log*/
+gcampax_dataset/
+gcampax_models/
 
 # Distribution / packaging
 .Python

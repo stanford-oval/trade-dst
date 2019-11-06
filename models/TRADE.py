@@ -441,6 +441,7 @@ class Generator(nn.Module):
         self.nb_gate = nb_gate
         self.hidden_size = hidden_size
         self.W_ratio = nn.Linear(3*hidden_size, 1)
+        self.W_slot_embed = nn.Linear(2*hidden_size, hidden_size)
         self.softmax = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
         self.slots = slots
@@ -510,8 +511,13 @@ class Generator(nn.Module):
             slot_emb = self.Slot_emb(slot_w2idx)
 
             # Combine two embeddings as one query
-            combined_emb = domain_emb + slot_emb
-            slot_emb_dict[slot] = combined_emb
+            self.W_slot_embed
+            if args['merge_embed'] == 'sum':
+                combined_emb = domain_emb + slot_emb
+            elif args['merge_embed'] == 'mean':
+                combined_emb = (domain_emb + slot_emb) / 2
+            elif args['merge_embed'] == 'concat':
+                combined_emb = self.W_slot_embed(torch.cat([domain_emb, slot_emb], dim=-1))
             slot_emb_exp = combined_emb.expand_as(encoded_hidden)
             if i == 0:
                 slot_emb_arr = slot_emb_exp.clone()
