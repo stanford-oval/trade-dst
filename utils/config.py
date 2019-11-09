@@ -45,7 +45,18 @@ parser.add_argument('-gate', '--use_gate', help='', required=False, default=1, t
 parser.add_argument('-le', '--load_embedding', help='', required=False, default=0, type=int)
 parser.add_argument('-femb', '--fix_embedding', help='', required=False, default=0, type=int)
 parser.add_argument('-paral', '--parallel_decode', help='', required=False, default=1, type=int)
+parser.add_argument('--cell_type', help='cell type to use for RNN models', required=False, default='GRU', choices=['LSTM', 'GRU'])
 parser.add_argument('--pretrain_domain_embeddings', help='', required=False, default=False, action='store_true')
+parser.add_argument('--merge_embed', help='merging strategy to combine slot and domain embeddings', required=False, default='sum', choices=['sum', 'mean', 'concat'])
+
+# for TPRNN
+parser.add_argument("--nSymbols", default=50, type=int, help="# of symbols")
+parser.add_argument("--nRoles", default=35, type=int, help="# of roles")
+parser.add_argument("--dSymbols", default=30, type=int, help="embedding size of symbols")
+parser.add_argument("--dRoles", default=30, type=int, help="embedding size of roles")
+parser.add_argument("--temperature", default=1.0, type=float, help="softmax temperature for aF and aR")
+parser.add_argument("--scale_val", type=float, default=1.0, help='initial value of scale factor')
+parser.add_argument("--train_scale", type=str2bool, default=False, help='whether scale factor should be trainable')
 
 # Model Hyper-Parameters
 parser.add_argument('-dec', '--decoder', help='decoder model', required=False)
@@ -82,7 +93,7 @@ parser.add_argument("--delete_ok", type=str2bool, default=False, help='whether t
 parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")
 parser.add_argument("--do_lower_case", type=str2bool, default=False, help="Set this flag if you are using an uncased model.")
 parser.add_argument("--num_bert_layers", type=int, default=12, help='num_bert_layers to use in our model')
-parser.add_argument("--encoder", type=str, default='RNN', choices=['RNN', 'BERT'], help='type of encoder to use for context')
+parser.add_argument("--encoder", type=str, default='RNN', choices=['RNN', 'BERT', 'TPRNN'], help='type of encoder to use for context')
 parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for distributed training on gpus")
 
 parser.add_argument('-mcl', "--max_context_length", type=int, default=-1, help="maximum length of context should not be larger than 512 when using BERT as encoder")
@@ -101,7 +112,7 @@ if args["only_domain"] != "":
 
 args['batch'] = int(args['batch'] / args['gradient_accumulation_steps'])
 
-if args['bert_model'] and 'uncased' in args['bert_model'] and not args['do_lower_case']:
+if args['encoder'] == 'BERT' and 'uncased' in args['bert_model'] and not args['do_lower_case']:
     print('do_lower_case should be True if uncased bert models are used')
     print('changing do_lower_case from False to True')
     args['do_lower_case'] = True

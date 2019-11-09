@@ -77,9 +77,9 @@ class Dataset(data.Dataset):
         turn_domain = self.preprocess_domain(self.turn_domain[index])
         generate_y = self.generate_y[index]
         generate_y = self.preprocess_slot(generate_y, self.trg_word2id)
-        # context = self.dialog_history[index]
-        context = self.preprocess(self.dialog_history[index] , self.src_word2id)
         context_plain = self.dialog_history[index]
+        context = self.preprocess(context_plain, self.src_word2id)
+
         
         item_info = {
             "ID":ID, 
@@ -109,7 +109,6 @@ class Dataset(data.Dataset):
         for value in sequence:
             v = [word2idx[word] if word in word2idx else UNK_token for word in value.split()] + [EOS_token]
             story.append(v)
-        # story = torch.Tensor(story)
         return story
 
     def preprocess_memory(self, sequence, word2idx):
@@ -136,8 +135,9 @@ def collate_fn(data, tokenizer=None):
         merge from batch * sent_len to batch * max_len 
         '''
 
-        lengths = [len(seq) for seq in sequences]
+        new_sequences = sequences
         if is_context:
+            lengths = [len(seq) for seq in sequences]
             if args['max_context_length'] == -1:
                 new_sequences = sequences
             else:
@@ -219,8 +219,9 @@ def collate_fn(data, tokenizer=None):
     all_sub_word_masks = None
 
     if args['encoder'] == 'BERT':
-        story_plain = item_info['context_plain']
+        story_plain = context_plain_seqs
         max_seq_length = max(src_lengths)
+        # max_seq_length = 512
         features = convert_examples_to_features(story_plain, tokenizer=tokenizer, max_seq_length=max_seq_length)
         all_input_ids = torch.tensor([f.input_ids for f in features], dtype=torch.long)
         all_input_mask = torch.tensor([f.input_mask for f in features], dtype=torch.uint8)

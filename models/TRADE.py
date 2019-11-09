@@ -11,6 +11,7 @@ from tqdm import tqdm
 
 from utils.masked_cross_entropy import masked_cross_entropy_for_value
 from utils.config import args, PAD_token
+from models.modules import TPRencoder_LSTM
 
 from transformers.modeling_bert import BertModel
 from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
@@ -32,13 +33,19 @@ class TRADE(nn.Module):
         self.device = device
         self.nb_gate = len(gating_dict)
         self.cross_entorpy = nn.CrossEntropyLoss()
+        self.cell_type = args['cell_type']
 
         if args['encoder'] == 'RNN':
-            self.encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout, self.device)
-            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device)
+            self.encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type)
+            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device, self.cell_type)
+        elif args['encoder'] == 'TPRNN':
+            self.encoder = EncoderTPRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type,
+                                        args['nSymbols'], args['nRoles'], args['dSymbols'], args['dRoles'],
+                                        args['temperature'], args['scale_val'], args['train_scale'])
+            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device, self.cell_type)
         else:
             self.encoder = BERTEncoder(hidden_size, self.dropout, self.device)
-            self.decoder = Generator(self.lang, None, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device)
+            self.decoder = Generator(self.lang, None, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device, self.cell_type)
 
         if path:
             print("MODEL {} LOADED".format(str(path)))
@@ -94,10 +101,6 @@ class TRADE(nn.Module):
         # Encode and Decode
         use_teacher_forcing = random.random() < args["teacher_forcing_ratio"]
         all_point_outputs, gates, words_point_out, words_class_out = self.encode_and_decode(data, use_teacher_forcing, slot_temp)
-        # all_point_outputs  30 32 7 18311
-        # gates  30 32 3
-        # words_point_out UNK...
-        # words_class_out []
 
         loss_ptr = masked_cross_entropy_for_value(
             all_point_outputs.transpose(0, 1).contiguous(),
@@ -114,7 +117,7 @@ class TRADE(nn.Module):
         self.loss_ptr_to_bp = loss_ptr
         
         # Update parameters with optimizers
-        self.loss += loss.data
+        self.loss += loss.item()
         self.loss_ptr += loss_ptr.item()
         self.loss_gate += loss_gate.item()
 
@@ -128,7 +131,7 @@ class TRADE(nn.Module):
             self.scheduler.step()
 
     def encode_and_decode(self, data, use_teacher_forcing, slot_temp):
-        if args['encoder'] == 'RNN':
+        if args['encoder'] == 'RNN' or args['encoder'] == 'TPRNN':
             # Build unknown mask for memory to encourage generalization
             if args['unk_mask'] and self.decoder.training:
                 story_size = data['context'].size()
@@ -171,6 +174,7 @@ class TRADE(nn.Module):
             use_teacher_forcing, slot_temp)
 
         return all_point_outputs, all_gate_outputs, words_point_out, words_class_out
+
     def evaluate(self, dev, matric_best, slot_temp, device, save_dir="", save_string = "", early_stop=None):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
@@ -364,17 +368,70 @@ class BERTEncoder(nn.Module):
 
         return output, hidden
 
+class EncoderTPRNN(nn.Module):
+    def __init__(self, vocab_size, hidden_size, dropout, device, cell_type, nSymbols, nRoles, dSymbols, dRoles, temperature, scale_val, train_scale, n_layers=1):
+        super(EncoderTPRNN, self).__init__()
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.dropout = dropout
+        self.dropout_layer = nn.Dropout(dropout)
+        self.device = device
+        self.embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=PAD_token)
+        self.embedding.weight.data.normal_(0, 0.1)
+        self.cell_type = cell_type
+        self.nSymbols = nSymbols
+        self.nRoles = nRoles
+        self.dSymbols = dSymbols
+        self.dRoles = dRoles
+        self.temperature = temperature
+        self.scale_val = scale_val
+        self.train_scale = train_scale
+        self.proj = nn.Linear(self.dSymbols * self.dRoles * 2, hidden_size)
+
+        encoder_args= {'in_dim': hidden_size, 'hidden_size': hidden_size, 'n_layers': n_layers, 'cell_type': cell_type, 'dropout': dropout,
+                       'bidirectional': True, 'batch_first': True, 'nSymbols': self.nSymbols, 'nRoles': self.nRoles,
+                       'dSymbols': self.dSymbols, 'dRoles': self.dRoles, 'temperature': self.temperature, 'scale_val': self.scale_val,
+                       'train_scale': self.train_scale}
+        self.rnn = TPRencoder_LSTM(encoder_args)
+
+        if args["load_embedding"]:
+            with open(os.path.join("data/", 'emb{}.json'.format(vocab_size))) as f:
+                E = json.load(f)
+            new = self.embedding.weight.data.new
+            self.embedding.weight.data.copy_(new(E))
+            self.embedding.weight.requires_grad = True
+            print("Encoder embedding requires_grad", self.embedding.weight.requires_grad)
+
+        if args["fix_embedding"]:
+            self.embedding.weight.requires_grad = False
+
+    def forward(self, input_seqs, input_lengths, hidden=None):
+        # Note: we run this all at once (over multiple batches of multiple sequences)
+        embedded = self.embedding(input_seqs)
+        embedded = self.dropout_layer(embedded)
+
+        output, (last_output, aFs, aRs), R_loss = self.rnn.call(embedded)
+
+        outputs = self.proj(output)
+        hidden = self.proj(last_output)
+
+        return outputs, hidden.unsqueeze(0)
+
 class EncoderRNN(nn.Module):
-    def __init__(self, vocab_size, hidden_size, dropout, device, n_layers=1):
+    def __init__(self, vocab_size, hidden_size, dropout, device, cell_type, n_layers=1):
         super(EncoderRNN, self).__init__()
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size  
         self.dropout = dropout
         self.dropout_layer = nn.Dropout(dropout)
         self.device = device
+        self.cell_type = cell_type
         self.embedding = nn.Embedding(vocab_size, hidden_size, padding_idx=PAD_token)
         self.embedding.weight.data.normal_(0, 0.1)
-        self.gru = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True, batch_first=True)
+        if self.cell_type == 'GRU':
+            self.rnn = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True, batch_first=True)
+        elif self.cell_type == 'LSTM':
+            self.rnn = nn.LSTM(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True, batch_first=True)
         # self.domain_W = nn.Linear(hidden_size, nb_domain)
 
         if args["load_embedding"]:
@@ -390,33 +447,36 @@ class EncoderRNN(nn.Module):
 
     def get_state(self, bsz):
         """Get cell states and hidden states."""
-        return torch.zeros(2, bsz, self.hidden_size).to(self.device)
+        if self.cell_type == 'GRU':
+            return torch.zeros(2, bsz, self.hidden_size).to(self.device)
+        if self.cell_type == 'LSTM':
+            return (torch.zeros(2, bsz, self.hidden_size).to(self.device), torch.zeros(2, bsz, self.hidden_size).to(self.device))
 
     def forward(self, input_seqs, input_lengths, hidden=None):
         # Note: we run this all at once (over multiple batches of multiple sequences)
         embedded = self.embedding(input_seqs)
         embedded = self.dropout_layer(embedded)
         total_length = embedded.size(1)
-        # embedded  344, 32, 400
+        # embedded  32, 344, 400
         hidden = self.get_state(input_seqs.size(0))
         # import pdb; pdb.set_trace()
         #hidden 2, 32, 400
         if input_lengths is not None:
             embedded = nn.utils.rnn.pack_padded_sequence(embedded, input_lengths, batch_first=True)
-        outputs, hidden = self.gru(embedded, hidden)
+        outputs, hidden = self.rnn(embedded, hidden)
         if input_lengths is not None:
            outputs, _ = nn.utils.rnn.pad_packed_sequence(outputs, batch_first=True, total_length=total_length)
-        # outputs  344, 32, 800
+        # outputs  32, 344, 800
         # They sum hidden and output states from different directions but WHY?! #TODO
         hidden = hidden[0] + hidden[1]
         # hidden 32 400
         outputs = outputs[:,:,:self.hidden_size] + outputs[:,:,self.hidden_size:]
-        # outputs  344, 32, 400
+        # outputs  32, 344, 400
         return outputs, hidden.unsqueeze(0)
 
 
 class Generator(nn.Module):
-    def __init__(self, lang, shared_emb, vocab_size, hidden_size, dropout, slots, nb_gate, device):
+    def __init__(self, lang, shared_emb, vocab_size, hidden_size, dropout, slots, nb_gate, device, cell_type):
         super(Generator, self).__init__()
         self.vocab_size = vocab_size
         self.lang = lang
@@ -436,15 +496,21 @@ class Generator(nn.Module):
             if args["fix_embedding"]:
                 self.embedding.weight.requires_grad = False
 
+        self.cell_type = cell_type
         self.dropout_layer = nn.Dropout(dropout)
-        self.gru = nn.GRU(hidden_size, hidden_size, dropout=dropout)
+        if self.cell_type == 'GRU':
+            self.rnn = nn.GRU(hidden_size, hidden_size, dropout=dropout)
+        elif self.cell_type == 'LSTM':
+            self.rnn = nn.LSTM(hidden_size, hidden_size, dropout=dropout)
         self.nb_gate = nb_gate
         self.hidden_size = hidden_size
         self.W_ratio = nn.Linear(3*hidden_size, 1)
+        self.W_slot_embed = nn.Linear(2*hidden_size, hidden_size)
         self.softmax = nn.Softmax(dim=1)
         self.sigmoid = nn.Sigmoid()
         self.slots = slots
         self.device = device
+
 
         self.W_gate = nn.Linear(hidden_size, nb_gate)
 
@@ -485,9 +551,7 @@ class Generator(nn.Module):
     def forward(self, batch_size, encoded_hidden, encoded_outputs, encoded_lens, story, max_res_len, target_batches, use_teacher_forcing, slot_temp):
         all_point_outputs = torch.zeros(len(slot_temp), batch_size, max_res_len, self.vocab_size, device=self.device)
         all_gate_outputs = torch.zeros(len(slot_temp), batch_size, self.nb_gate, device=self.device)
-        all_point_outputs = all_point_outputs.to(self.device)
-        all_gate_outputs = all_gate_outputs.to(self.device)
-        
+
         # Get the slot embedding 
         slot_emb_dict = {}
         for i, slot in enumerate(slot_temp):
@@ -512,8 +576,13 @@ class Generator(nn.Module):
             slot_emb = self.Slot_emb(slot_w2idx)
 
             # Combine two embeddings as one query
-            combined_emb = domain_emb + slot_emb
-            slot_emb_dict[slot] = combined_emb
+            self.W_slot_embed
+            if args['merge_embed'] == 'sum':
+                combined_emb = domain_emb + slot_emb
+            elif args['merge_embed'] == 'mean':
+                combined_emb = (domain_emb + slot_emb) / 2
+            elif args['merge_embed'] == 'concat':
+                combined_emb = self.W_slot_embed(torch.cat([domain_emb, slot_emb], dim=-1))
             slot_emb_exp = combined_emb.expand_as(encoded_hidden)
             if i == 0:
                 slot_emb_arr = slot_emb_exp.clone()
@@ -528,7 +597,7 @@ class Generator(nn.Module):
             words_class_out = []
             
             for wi in range(max_res_len):
-                dec_state, hidden = self.gru(decoder_input.expand_as(hidden), hidden)
+                dec_state, hidden = self.rnn(decoder_input.expand_as(hidden), hidden)
 
                 enc_out = encoded_outputs.repeat(len(slot_temp), 1, 1)
                 enc_len = encoded_lens * len(slot_temp)
@@ -572,7 +641,7 @@ class Generator(nn.Module):
                 slot_emb = slot_emb_dict[slot]
                 decoder_input = self.dropout_layer(slot_emb).expand(batch_size, self.hidden_size)
                 for wi in range(max_res_len):
-                    dec_state, hidden = self.gru(decoder_input.expand_as(hidden), hidden)
+                    dec_state, hidden = self.rnn(decoder_input.expand_as(hidden), hidden)
                     context_vec, logits, prob = self.attend(encoded_outputs, hidden.squeeze(0), encoded_lens)
                     if wi == 0: 
                         all_gate_outputs[counter] = self.W_gate(context_vec)
@@ -616,17 +685,3 @@ class Generator(nn.Module):
         scores_ = cond.matmul(seq.transpose(1,0))
         scores = F.softmax(scores_, dim=1)
         return scores
-
-
-class AttrProxy(object):
-    """
-    Translates index lookups into attribute lookups.
-    To implement some trick which able to use list of nn.Module in a nn.Module
-    see https://discuss.pytorch.org/t/list-of-nn-module-in-a-nn-module/219/2
-    """
-    def __init__(self, module, prefix):
-        self.module = module
-        self.prefix = prefix
-
-    def __getitem__(self, i):
-        return getattr(self.module, self.prefix + str(i))
