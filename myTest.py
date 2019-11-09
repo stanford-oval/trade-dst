@@ -12,8 +12,8 @@ def run():
 
     directory = args['path'].split("/")
     print(directory)
-    HDD = directory[-1].split('HDD')[1].split('BSZ')[0]
-    decoder = directory[-2].split('-')[0]
+    HDD = directory[2].split('HDD')[1].split('BSZ')[0]
+    decoder = directory[1].split('-')[0]
     BSZ = int(args['batch']) if args['batch'] else int(directory[2].split('BSZ')[1].split('DR')[0])
     args["decoder"] = decoder
     args["HDD"] = HDD

@@ -45,6 +45,7 @@ parser.add_argument('-gate', '--use_gate', help='', required=False, default=1, t
 parser.add_argument('-le', '--load_embedding', help='', required=False, default=0, type=int)
 parser.add_argument('-femb', '--fix_embedding', help='', required=False, default=0, type=int)
 parser.add_argument('-paral', '--parallel_decode', help='', required=False, default=1, type=int)
+parser.add_argument('--pretrain_domain_embeddings', help='', required=False, default=False, action='store_true')
 
 # Model Hyper-Parameters
 parser.add_argument('-dec', '--decoder', help='decoder model', required=False)
@@ -74,6 +75,7 @@ parser.add_argument('-onlyd', '--only_domain', help='', required=False, default=
 # extra parameters
 parser.add_argument('--seed', help='seed for random operations', required=False, default="123", type=int)
 parser.add_argument('--log_dir', help='Save logs here', required=False, default="./log", type=str)
+parser.add_argument('--data_dir', help='Load data from here', required=False, default="./data", type=str)
 parser.add_argument("--delete_ok", type=str2bool, default=False, help='whether to delete the result directory if it already exists')
 
 # bert parameters
