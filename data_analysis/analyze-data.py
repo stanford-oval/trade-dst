@@ -6,6 +6,11 @@ from collections import defaultdict, Counter
 import numpy as np
 import pandas as pd
 import re
+import os, sys
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+repo_root = os.path.join(BASE_DIR, '..')
+os.chdir(repo_root)
 
 from utils.fix_label import fix_general_label_error
 
@@ -129,35 +134,143 @@ def load_data():
 
             prev_turn = turn['domain']
 
+def get_full_belief(turn):
+    dict_of_slots = fix_general_label_error(turn['belief_state'], False, ALL_SLOTS)
+    return ['-'.join((el, dict_of_slots[el])) for el in dict_of_slots], list(dict_of_slots.keys())
+    
 def generate_turn_frame(data):    
     
     slot_updates = dict()
     
     for dialogue in data:
         
-        old_belief = []
-        old_slots = []
+
         d_idx = dialogue["dialogue_idx"].split('.')[0]
         
         for t_idx, turn in enumerate(dialogue["dialogue"]):
             
             idx = '_'.join((d_idx, str(t_idx)))
             slot_updates[idx] = dict()
-            belief = ['-'.join(el) for el in dialogue["dialogue"][t_idx]["turn_label"]]
-            slots = [el[0] for el in dialogue["dialogue"][t_idx]["turn_label"]]
-            added_belief = difference(belief, old_belief)
-            added_slots = difference(slots, old_slots)
+            belief, slots = get_full_belief(turn)
+            added_belief = ['-'.join(el) for el in turn["turn_label"]]
+            added_slots = [el[0] for el in turn["turn_label"]]
             
             slot_updates[idx] = {'dialogue': d_idx, 'turn': t_idx, 'full_belief': belief, \
                                   'step_belief': added_belief, 'full_slots': slots, 'step_slots': added_slots, \
                                   'transcript': turn['transcript'], 'system_transcript': turn['system_transcript'], \
-                                  'step_empty': (len(added_belief) == 0), 'full_empty': (len(belief) == 0)}
-            
-            old_belief = belief
-            old_slots = slots
+                                  'step_empty': (len(added_belief) == 0), 'full_empty': (len(belief) == 0), \
+                                  'domain': turn['domain']}
             
     slot_updates = pd.read_json(json.dumps(slot_updates)).transpose()
     return slot_updates
 
-# def main():
-#     for
+    
+def select_domains(frame, domain_list):
+    
+    return frame[frame.domain.isin(domain_list)]
+
+def dials_as_frame(split_type, domains = None):
+    
+    assert(split_type in ["train", "test", "dev"])
+
+    filename = os.path.join(repo_root, 'data', ''.join((split_type, '_dials.json')))
+
+    with open(filename) as fp:
+        dialogue_data = json.load(fp)
+    
+    frame = generate_turn_frame(dialogue_data)
+    
+    if domains:
+        frame = select_domains(frame, domains)
+
+    return frame
+
+def get_errors(df):
+    df_correct = df["det_full_correct"].apply(sum).astype(float)
+    df_slots = df["det_full_correct"].apply(len).astype(float)
+    df["percent_correct"] = df_correct/df_slots
+    a = df[["turn", "percent_correct"]]
+    partially_correct = a[(a["percent_correct"]>0) & (a["percent_correct"] < 1)]
+    fully_correct = a[a["percent_correct"] == 1]
+    fully_incorrect = a[a["percent_correct"] == 0]
+    correct_empty = a[a["percent_correct"].isna()]
+    return partially_correct, fully_correct, fully_incorrect, correct_empty
+
+'''
+TODO: This checks for full <slot type - value> accuracy, doesn't split it...
+'''
+def add_error_types(frame):
+    
+    pred_step_belief = frame['pred_step_belief']
+    true_step_belief = frame['true_step_belief']
+    
+    pred_full_belief = frame['pred_full_belief']
+    true_full_belief = frame['true_full_belief']
+
+
+    frame["det_inserted"] = list(set(pred_step_belief) - set(true_step_belief))
+    frame["det_missed"] = list(set(true_step_belief) - set(pred_step_belief))
+    frame["det_full_correct"] = [el in pred_full_belief for el in true_full_belief]
+    frame["det_step_correct"] = [el in pred_step_belief for el in true_step_belief]
+    
+    det_step_correct = frame["det_step_correct"]
+    det_full_correct = frame["det_full_correct"]
+    det_inserted = frame["det_inserted"]
+    det_missed = frame["det_missed"]
+    
+    frame["step_correct"] = (False not in det_step_correct)#bool(sum(det_step_correct))
+    frame["full_correct"] = (False not in det_full_correct) #bool(sum(det_full_correct))  
+    frame["inserted"] = (len(det_inserted)>0)
+    frame["missed"] = (len(det_missed)>0)
+    if len(det_full_correct) > 0:
+        frame["percent_found"] = sum(det_full_correct)/len(det_full_correct)
+    else:
+        frame["percent_found"] = None
+    
+    return frame
+
+def generate_TRADE_turn_frame(predictions, pred_slot_columns=False, gt_slot_columns=False):       
+
+    slot_updates = dict()
+    for d_idx, dialogue in predictions.items():
+        old_belief = []
+        true_old_belief = []
+        for t_idx in range(len(dialogue.keys())):
+            # the unique id: <dialogue>_<turn>
+            idx = '_'.join((d_idx.split('.')[0], str(t_idx+1)))
+            t_idx = str(t_idx)
+            slot_updates[idx] = dict()
+            turn = dialogue[t_idx]
+            new_belief = turn['pred_bs_ptr']
+            true_belief = turn['turn_belief']
+            added_belief = difference(new_belief, old_belief)
+            true_added_belief = difference(true_belief, true_old_belief)
+            
+            # has anything been added?
+            added_empty = (len(added_belief) == 0)
+            true_empty = (len(true_added_belief) == 0)
+            
+            slot_updates[idx]['dialogue'] = d_idx.split('.')[0]
+            slot_updates[idx]['turn'] = t_idx
+            
+            slot_updates[idx]['pred_full_belief'] = new_belief
+            slot_updates[idx]['true_full_belief'] = true_belief
+            slot_updates[idx]['pred_step_belief'] = added_belief 
+            slot_updates[idx]['true_step_belief'] = true_added_belief
+            
+            slot_updates[idx] = add_error_types(slot_updates[idx])
+            
+            slot_updates[idx]['pred_empty'] = added_empty
+            slot_updates[idx]['true_empty'] = true_empty
+            
+            old_belief = new_belief
+            true_old_belief = true_belief
+            
+    slot_updates = pd.read_json(json.dumps(slot_updates, indent=4)).transpose()
+    return slot_updates
+
+def experiment_results_frame(input_file):
+    output_file = os.path.join(experiment_path(experiment), "inference_turn_info.csv")
+    baseline_test_set = read_json(input_file)
+    frame = generate_TRADE_turn_frame(baseline_test_set)
+    return frame
