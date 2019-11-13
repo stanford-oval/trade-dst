@@ -4,8 +4,51 @@ import sys
 import json
 from collections import defaultdict
 import random
+import copy
 
-random.seed(sys.argv[1])
+from utils.fix_label import fix_general_label_error
+
+random.seed(12345)
+
+EXPERIMENT_DOMAINS = ["none", "hotel", "train", "restaurant", "attraction", "taxi"]
+DOMAIN_INDICES = dict()
+for domain in EXPERIMENT_DOMAINS:
+    DOMAIN_INDICES[domain] = len(DOMAIN_INDICES)
+def get_slot_information():
+    ontology = json.load(open("data/multi-woz/MULTIWOZ2.1/ontology.json", 'r'))
+    ontology_domains = dict([(k, v) for k, v in ontology.items() if k.split("-")[0] in EXPERIMENT_DOMAINS])
+    SLOTS = [k.replace(" ","").lower() if ("book" not in k) else k.lower() for k in ontology_domains.keys()]
+    return SLOTS
+ALL_SLOTS = get_slot_information()
+
+
+class ReplaceBag:
+    def __init__(self):
+        self.store = dict()
+        self.max_replace_len = 0
+
+    def __len__(self):
+        return len(self.store)
+
+    def __contains__(self, key):
+        return ' '.join(key) in self.store
+
+    def __getitem__(self, key):
+        return self.store[' '.join(key)]
+
+    def get_replacement(self, sentence, offset):
+        for length in range(1, 1 + min(self.max_replace_len, len(sentence)-offset)):
+            slice = ' '.join(sentence[offset:offset+length])
+            if slice in self.store:
+                return length, self.store[slice]
+        return 0, None
+
+    def add(self, substring, replacement):
+        assert isinstance(substring, list)
+        assert len(substring) > 0
+        self.store[' '.join(substring)] = replacement
+        self.max_replace_len = max(self.max_replace_len, len(substring))
+
 
 def parse_belief(belief_str):
     if belief_str == 'none':
@@ -26,6 +69,10 @@ def parse_belief(belief_str):
             i += 1
         slot_name_end = i
         slot_name = ' '.join(tokens[slot_name_begin : slot_name_end])
+
+        # this is some weird preprocessing on the slot_name but we do it to be consistent with the TRADE codebase
+        slot_name = slot_name.replace(" ", "").lower() if ("book" not in slot_name) else slot_name.lower()
+
         slot_key = domain + '-' + slot_name
 
         assert tokens[i] == 'is'
@@ -45,6 +92,7 @@ def parse_belief(belief_str):
             belief[slot_key] = ' '.join(tokens[slot_value_begin : slot_value_end])
     return belief, domains
 
+
 def belief_to_json(parsed_belief):
     belief_state = []
     for key in parsed_belief:
@@ -56,99 +104,170 @@ def belief_to_json(parsed_belief):
         })
     return belief_state
 
-dialogues_by_belief_state = defaultdict(list)
-dialogues = dict()
 
-shuffle = True
+def load_data():
+    filename = 'data/train_dials.json'
+    if len(sys.argv) >= 2:
+        filename = sys.argv[1]
 
-all_lines = list(sys.stdin)
-if shuffle:
+    filtered_domains = []
+    with open(filename) as fp:
+        data = json.load(fp)
+
+        for dialogue in data:
+            is_good_domain = True
+            for domain in dialogue['domains']:
+                if domain not in EXPERIMENT_DOMAINS:
+                    is_good_domain = False
+            if is_good_domain:
+                filtered_domains.append(dialogue)
+    return filtered_domains
+
+
+def compute_signature(label_dict : dict):
+    sig = []
+    for slot_key, slot_value in label_dict.items():
+        if slot_value == 'none':
+            continue
+        if slot_value in ('yes', 'no', 'dontcare'):
+            sig.append((slot_key, slot_value))
+        else:
+            sig.append((slot_key, 'value'))
+
+    return '+'.join(slot_key + '=' + slot_value for slot_key, slot_value in sig)
+
+
+def compute_continuations(data):
+    continuations = defaultdict(list)
+
+    for dialogue in data:
+        dialogue['dialogue'].sort(key=lambda x: x['turn_idx'])
+
+        for turn_idx, turn in enumerate(dialogue['dialogue']):
+            label_dict = fix_general_label_error(turn['belief_state'], False, ALL_SLOTS)
+            if len(label_dict) > 0:
+                dialogue['dialogue'] = dialogue['dialogue'][turn_idx+1:]
+                continuations[compute_signature(label_dict)].append((dialogue, label_dict))
+                break
+
+    return continuations
+
+
+def make_replacement_bag(old_label_dict, new_label_dict):
+    replace_bag = ReplaceBag()
+
+    for slot_key, old_value in old_label_dict.items():
+        if old_value == 'none':
+            continue
+
+        new_value = new_label_dict[slot_key]
+        if old_value in ('yes', 'no', 'dontcare'):
+            assert new_value == old_value
+            continue
+
+        replace_bag.add(old_value.split(' '), new_value.split(' '))
+
+    return replace_bag
+
+
+def apply_replacement(sentence, turn_belief_bag):
+    sentence = sentence.split()
+    new_sentence = []
+
+    i = 0
+    while i < len(sentence):
+        replaced_length, replacement = turn_belief_bag.get_replacement(sentence, i)
+        if replaced_length > 0:
+            new_sentence += replacement
+            i += replaced_length
+            continue
+
+        new_sentence.append(sentence[i])
+        i += 1
+
+    return new_sentence
+
+
+def apply_new_label_dict_to_dialogue(dialogue, old_label_dict, new_label_dict):
+    replace_bag = make_replacement_bag(old_label_dict, new_label_dict)
+
+    for turn in dialogue['dialogue']:
+        turn['original_system_transcript'] = turn['system_transcript']
+        turn['system_transcript'] = ' '.join(apply_replacement(turn['system_transcript'], replace_bag))
+        turn['original_transcript'] = turn['transcript']
+        turn['transcript'] = ' '.join(apply_replacement(turn['transcript'], replace_bag))
+
+        label_dict = fix_general_label_error(turn['belief_state'], False, ALL_SLOTS)
+
+        for slot_key in list(label_dict.keys()):
+            if slot_key in old_label_dict and label_dict[slot_key] == old_label_dict[slot_key]:
+                if old_label_dict[slot_key] == 'none':
+                    del label_dict[slot_key]
+                    continue
+                label_dict[slot_key] = new_label_dict[slot_key]
+
+        turn['belief_state'] = belief_to_json(label_dict)
+
+
+def process_beginnings(continuations):
+    all_lines = list(sys.stdin)
     random.shuffle(all_lines)
 
-for line in all_lines:
-    _id, context, turn, belief_str = line.strip().split('\t')
+    for line in all_lines:
+        _id, sentence, target_code = line.strip().split('\t')
+        if target_code == 'none':
+            continue
 
-    system, user = turn.split(';')
-    system = system.strip()
-    user = user.strip()
+        target_belief, domains = parse_belief(target_code)
 
-    belief_state, belief_domains = parse_belief(belief_str)
+        candidate_continuations = continuations[compute_signature(target_belief)]
 
-    if shuffle:
-        turn_obj = {
-            'system_transcript': system,
-            'transcript': user,
-            'belief_state': belief_state,
-            'turn_label': None,
-            'domain': ''
-        }
+        #print(f'Found {len(candidate_continuations)} continuations for {_id}', file=sys.stderr)
 
-        if context == 'none':
-            turn_obj['turn_idx'] = 0
-            dialogue_obj = {
-                "dialogue_idx": 'shuffled' + sys.argv[1] + '/' + str(len(dialogues)),
-                "domains": list(belief_domains),
-                "dialogue": [
-                    turn_obj
+        if len(candidate_continuations) > 0:
+            chosen_dialogue, old_label_dict = random.choice(candidate_continuations)
+
+            chosen_dialogue = copy.deepcopy(chosen_dialogue)
+
+            chosen_dialogue['dialogue_idx'] = _id + '+' + chosen_dialogue['dialogue_idx']
+
+            apply_new_label_dict_to_dialogue(chosen_dialogue, old_label_dict, target_belief)
+
+            new_turn = {
+                'system_transcript': '',
+                'turn_idx': 0,
+                'belief_state': belief_to_json(target_belief),
+                'turn_label': [
+                    (slot_key, slot_value) for slot_key, slot_value in target_belief.items()
                 ],
-            }
-            dialogues[dialogue_obj['dialogue_idx']] = dialogue_obj
-            dialogues_by_belief_state[belief_str].append(dialogue_obj)
-        else:
-            candidates = dialogues_by_belief_state[context]
-            if len(candidates) == 0:
-                continue
-
-            chosen = candidates.pop(random.randint(0, len(candidates)-1))
-
-            turn_obj['turn_idx'] = len(chosen['dialogue'])
-            chosen['dialogue'].append(turn_obj)
-
-            dialogues_by_belief_state[belief_str].append(chosen)
-    else:
-        _, dialogue_idx, turn_idx = _id.split('/')
-        turn_idx = int(turn_idx)
-        if dialogue_idx not in dialogues:
-            dialogues[dialogue_idx] = {
-                "dialogue_idx": dialogue_idx,
-                "domains": [],
-                "dialogue": [],
+                'transcript': sentence,
+                'system_acts': [],
+                'domain': list(domains)[0]
             }
 
-        dialogue = dialogues[dialogue_idx]
+            chosen_dialogue['dialogue'].insert(0, new_turn)
 
-        for domain in belief_domains:
-            if domain not in dialogue['domains']:
-                dialogue['domains'].append(domain)
+            for turn_idx, turn in enumerate(chosen_dialogue['dialogue']):
+                turn['turn_idx'] = turn_idx
 
-        dialogue['dialogue'].append({
-            'turn_idx': turn_idx,
-            'system_transcript': system,
-            'transcript': user,
-            'belief_state': belief_state,
-            'turn_label': None,
-            'domain': ''
-        })
+            yield chosen_dialogue
 
-for dialogue in dialogues.values():
-    dialogue['dialogue'].sort(key=lambda x: x['turn_idx'])
 
-    previous_belief_state = dict()
-    for turn in dialogue['dialogue']:
-        turn_label = dict()
-        for key in turn['belief_state']:
-            if key not in previous_belief_state or \
-                    turn['belief_state'][key] != previous_belief_state[key]:
-                turn_label[key] = turn['belief_state'][key]
-                domain, slot_name = key.split('-', maxsplit=1)
-                turn['domain'] = domain
-        if turn['domain'] == '' and len(dialogue['domains']) > 0:
-            turn['domain'] = dialogue['domains'][0]
+def main():
+    original_data = load_data()
+    continuations = compute_continuations(original_data)
 
-        turn_label = [[k, v] for k, v in turn_label.items()]
-        turn['turn_label'] = turn_label
-        previous_belief_state = turn['belief_state']
-        turn['belief_state'] = belief_to_json(turn['belief_state'])
+    new_data = []
+    for i in range(3):
+        new_data += original_data
 
-print(len(dialogues), file=sys.stderr)
-json.dump(list(dial for dial in dialogues.values() if len(dial['domains']) > 0), sys.stdout, indent=2)
+    for new_dialogue in process_beginnings(continuations):
+        new_data.append(new_dialogue)
+
+    json.dump(new_data, sys.stdout, indent=2)
+    print()
+    print(len(new_data), file=sys.stderr)
+
+
+if __name__ == '__main__':
+    main()
