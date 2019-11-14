@@ -4,7 +4,6 @@ import torch
 import torch.utils.data as data
 from collections import OrderedDict
 from embeddings import GloveEmbedding, KazumaCharEmbedding
-from tqdm import tqdm
 import os
 import pickle
 from random import shuffle
@@ -414,7 +413,7 @@ def dump_pretrained_emb(word2index, index2word, dump_path):
     # ssl._create_default_https_context = ssl._create_unverified_context
     embeddings = [GloveEmbedding(), KazumaCharEmbedding()]
     E = []
-    for i in tqdm(range(len(word2index.keys()))):
+    for i in range(len(word2index.keys())):
         w = index2word[i]
         e = []
         for emb in embeddings:
