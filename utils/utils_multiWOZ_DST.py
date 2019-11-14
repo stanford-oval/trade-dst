@@ -280,7 +280,7 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
             # add sometimes missing domains to annotation
             for turn in dial_dict['dialogue']:
                 turn_belief_dict = fix_general_label_error(turn["belief_state"], False, SLOTS)
-                for slot_key, slot_value in turn_belief_dict:
+                for slot_key, slot_value in turn_belief_dict.items():
                     if slot_value == 'none':
                         continue
                     domain, slot_name = slot_key.split('-', maxsplit=1)
@@ -290,6 +290,8 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
 
             # Unseen domain setting
             if args["only_domain"] != "" and args["only_domain"] not in dial_dict["domains"]:
+                continue
+            if args['except_domain_dev'] != '' and dataset == 'dev' and args['except_domain_dev'] in dial_dict['domains']:
                 continue
             if (args["except_domain"] != "" and dataset == "test" and args["except_domain"] not in dial_dict["domains"]) or \
                (args["except_domain"] != "" and dataset != "test" and args["except_domain"] in dial_dict["domains"]):

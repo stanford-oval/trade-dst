@@ -81,6 +81,7 @@ parser.add_argument("--domain_as_task", action="store_true")
 parser.add_argument('--run_except_4d', help='', required=False, default=1, type=int)
 parser.add_argument("--strict_domain", action="store_true")
 parser.add_argument('-exceptd', '--except_domain', help='', required=False, default="", type=str)
+parser.add_argument('--except_domain_dev', help='like -exceptd, but only for dev set', required=False, default="", type=str)
 parser.add_argument('-onlyd', '--only_domain', help='', required=False, default="", type=str)
 
 # extra parameters
