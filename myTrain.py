@@ -142,7 +142,7 @@ def run():
                 if isinstance(core.scheduler, WarmupLinearSchedule):
                     core.scheduler.step()
 
-            pbar.set_description(core.print_loss()) #TODO
+        print(core.print_loss(), flush=True) #TODO
 
         if((epoch+1) % int(args['evalp']) == 0):
 

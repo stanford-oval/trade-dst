@@ -6,26 +6,28 @@ import random
 
 from utils.fix_label import fix_general_label_error
 from utils.augment import EXPERIMENT_DOMAINS, ALL_SLOTS, ReplaceBag, compute_continuations, process_synthetic, \
-    apply_replacement, belief_to_json, remove_none_slots
+    apply_replacement, belief_to_json, remove_none_slots, Augmenter
 
 random.seed(12345)
 
 TRANSFER_PHRASES = {
     'taxi': [
-        'taxi',
         'taxi ride',
-        'cab'
+        'taxi',
+        'cab',
+        'car'
     ],
     'train': [
-        'train',
         'train ride',
-        'train reservation'
+        'train reservation',
+        'train ticket',
+        'train',
     ],
 
     # FIXME
     'restaurant': [
-        'restaurant',
         'restaurant reservation',
+        'restaurant',
         'food place',
         'place to eat'
     ],
@@ -62,9 +64,6 @@ def transfer_data(original_data, from_domain, to_domain):
     assert len(transfer_phrases_from) > 0
     assert len(transfer_phrases_to) > 0
 
-    transfer_replace_bag = ReplaceBag()
-    for phrase in transfer_phrases_from:
-        transfer_replace_bag.add(phrase.split(' '), random.choice(transfer_phrases_to).split(' '))
 
     for dialogue in original_data:
         if not from_domain in dialogue['domains']:
@@ -74,6 +73,10 @@ def transfer_data(original_data, from_domain, to_domain):
         original_dialogue = copy.deepcopy(dialogue)
         new_data.append(original_dialogue)
 
+        transfer_replace_bag = ReplaceBag()
+        for phrase in transfer_phrases_from:
+            transfer_replace_bag.add(phrase.split(' '), random.choice(transfer_phrases_to).split(' '))
+
         good_dialogue = True
         for turn in dialogue['dialogue']:
             turn_idx = int(turn['turn_idx'])
@@ -81,8 +84,8 @@ def transfer_data(original_data, from_domain, to_domain):
             if turn_idx > 0:
                 turn['original_system_transcript'] = turn['system_transcript']
                 turn['system_transcript'] = ' '.join(apply_replacement(turn['system_transcript'], transfer_replace_bag))
-                turn['original_transcript'] = turn['transcript']
-                turn['transcript'] = ' '.join(apply_replacement(turn['transcript'], transfer_replace_bag))
+            turn['original_transcript'] = turn['transcript']
+            turn['transcript'] = ' '.join(apply_replacement(turn['transcript'], transfer_replace_bag))
             found_transfer_phrase = transfer_replace_bag.used > 0
 
             label_dict = fix_general_label_error(turn['belief_state'], False, ALL_SLOTS)
@@ -122,6 +125,10 @@ def transfer_data(original_data, from_domain, to_domain):
         if good_dialogue:
             dialogue['dialogue_idx'] = dialogue['dialogue_idx'] + '/' + from_domain + '->' + to_domain
             dialogue['domains'] = [x for x in dialogue['domains'] if x != from_domain] + [to_domain]
+
+            # replace the values in the new dialogue with values that make sense for the domain
+            augmenter = Augmenter(only_domain=to_domain)
+            augmenter.augment(dialogue['dialogue'])
 
             new_data.append(dialogue)
 
