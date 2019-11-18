@@ -46,6 +46,8 @@ def load_data(except_domain):
         data = json.load(fp)
 
         for dialogue in data:
+            dialogue['dialogue'].sort(key=lambda x: int(x['turn_idx']))
+
             is_good_domain = True
             for domain in dialogue['domains']:
                 if domain not in EXPERIMENT_DOMAINS \
@@ -54,6 +56,22 @@ def load_data(except_domain):
             if is_good_domain:
                 filtered_domains.append(dialogue)
     return filtered_domains
+
+
+def compute_prefixes(data):
+    prefixes = []
+
+    for dialogue in data:
+        domains = set()
+        for turn in dialogue['dialogue']:
+            turn_idx = turn['turn_idx']
+
+            if 'anything else' in turn['system_transcript']:
+               prefixes.append((dialogue, turn_idx, list(domains)))
+
+            domains.add(turn['domain'])
+
+    return prefixes
 
 
 def transfer_data(original_data, from_domain, to_domain):
@@ -146,6 +164,8 @@ def main():
     to_domain = sys.argv[2]
 
     original_data = load_data(to_domain)
+    prefixes = compute_prefixes(original_data)
+
     original_data = transfer_data(original_data, from_domain, to_domain)
 
     continuations = compute_continuations(original_data)
@@ -153,7 +173,7 @@ def main():
     new_data = []
     new_data += original_data
 
-    for new_dialogue in process_synthetic(continuations, from_file=sys.stdin):
+    for new_dialogue in process_synthetic(prefixes, continuations, from_file=sys.stdin):
         new_data.append(new_dialogue)
 
     json.dump(new_data, sys.stdout, indent=2)

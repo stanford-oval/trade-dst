@@ -1,7 +1,7 @@
 """
 Utilities for data augmentation
 """
-
+import sys
 from collections import defaultdict
 import json
 import copy
@@ -228,7 +228,97 @@ def apply_new_label_dict_to_dialogue(dialogue, old_label_dict, new_label_dict):
     # return whether all values were used in replacement at least once
     return replace_bag.used == len(replace_bag)
 
-def process_synthetic(continuations, from_file):
+
+def add_continuation(continuations, _id, sentence, target_belief, domains):
+    candidate_continuations = continuations[compute_signature(target_belief)]
+
+    # print(f'Found {len(candidate_continuations)} continuations for {_id}', file=sys.stderr)
+
+    if len(candidate_continuations) > 0:
+        chosen_dialogue, old_label_dict = random.choice(candidate_continuations)
+
+        chosen_dialogue = copy.deepcopy(chosen_dialogue)
+
+        chosen_dialogue['dialogue_idx'] = _id + '+' + chosen_dialogue['dialogue_idx']
+
+        if not apply_new_label_dict_to_dialogue(chosen_dialogue, old_label_dict, target_belief):
+            return None
+
+        new_turn = {
+            'system_transcript': '',
+            'turn_idx': 0,
+            'belief_state': belief_to_json(target_belief),
+            'transcript': sentence,
+            'system_acts': [],
+            'domain': list(domains)[0]
+        }
+
+        chosen_dialogue['dialogue'].insert(0, new_turn)
+
+        return chosen_dialogue
+    else:
+        return {
+            'dialogue_idx': _id,
+            'domains': list(domains),
+            'dialogue': [
+                {
+                    'system_transcript': '',
+                    'turn_idx': 0,
+                    'belief_state': belief_to_json(target_belief),
+                    'transcript': sentence,
+                    'system_acts': [],
+                    'domain': list(domains)[0]
+                }
+            ]
+        }
+
+
+def add_prefix(prefixes, new_dialogue):
+    if len(prefixes) == 0:
+        return
+    if coin(0.9):
+        return
+
+    for _attempt in range(10):
+        prefix_dialogue, prefix_turn_idx, prefix_domains = random.choice(prefixes)
+
+        if any(domain in new_dialogue['domains'] for domain in prefix_domains):
+            continue
+
+        new_dialogue['dialogue_idx'] += '+prefix:' + prefix_dialogue['dialogue_idx'] + '/' + str(prefix_turn_idx)
+
+        for prev_turn_idx in range(prefix_turn_idx):
+            new_dialogue['dialogue'].insert(prev_turn_idx, copy.deepcopy(prefix_dialogue['dialogue'][prev_turn_idx]))
+
+        assert new_dialogue['dialogue'][prefix_turn_idx]['system_transcript'] == ''
+        new_dialogue['dialogue'][prefix_turn_idx]['system_transcript'] = prefix_dialogue['dialogue'][prefix_turn_idx]['system_transcript']
+
+        if new_dialogue['dialogue'][prefix_turn_idx]['transcript'].startswith('hello '):
+            new_dialogue['dialogue'][prefix_turn_idx]['transcript'] = new_dialogue['dialogue'][prefix_turn_idx]['transcript'][len('hello ! '):]
+
+        if coin(0.2):
+            new_dialogue['dialogue'][prefix_turn_idx]['transcript'] = random.choice(['thank you . ', 'thanks ,', 'yes ,']) + new_dialogue['dialogue'][prefix_turn_idx]['transcript']
+
+        if prefix_turn_idx > 0:
+            previous_label_dict = fix_general_label_error(prefix_dialogue['dialogue'][prefix_turn_idx-1]['belief_state'], False, ALL_SLOTS)
+
+            for next_turn_idx in range(prefix_turn_idx, len(new_dialogue['dialogue'])):
+                turn = new_dialogue['dialogue'][next_turn_idx]
+                for slot_key, slot_value in previous_label_dict.items():
+                    if any(belief['slots'][0][0] == slot_key for belief in turn['belief_state']):
+                        continue
+                    turn['belief_state'].append({
+                        'slots': [
+                            [slot_key, slot_value]
+                        ],
+                        'act': 'inform'
+                    })
+
+        #print(json.dumps(new_dialogue, indent=2), file=sys.stderr)
+        #sys.exit(1)
+
+
+def process_synthetic(prefixes, continuations, from_file):
     all_lines = list(from_file)
     random.shuffle(all_lines)
 
@@ -242,56 +332,20 @@ def process_synthetic(continuations, from_file):
 
         target_belief, domains = parse_belief(target_code)
 
-        candidate_continuations = continuations[compute_signature(target_belief)]
+        new_dialogue = add_continuation(continuations, _id, sentence, target_belief, domains)
+        if new_dialogue is None:
+            continue
 
-        #print(f'Found {len(candidate_continuations)} continuations for {_id}', file=sys.stderr)
+        add_prefix(prefixes, new_dialogue)
 
-        if len(candidate_continuations) > 0:
-            chosen_dialogue, old_label_dict = random.choice(candidate_continuations)
+        for turn_idx, turn in enumerate(new_dialogue['dialogue']):
+            turn['turn_idx'] = turn_idx
+            turn['turn_label'] = [
+                (slot_key, slot_value) for slot_key, slot_value in (belief['slots'][0] for belief in turn['belief_state'])
+            ]
 
-            chosen_dialogue = copy.deepcopy(chosen_dialogue)
+        yield new_dialogue
 
-            chosen_dialogue['dialogue_idx'] = _id + '+' + chosen_dialogue['dialogue_idx']
-
-            if not apply_new_label_dict_to_dialogue(chosen_dialogue, old_label_dict, target_belief):
-                continue
-
-            new_turn = {
-                'system_transcript': '',
-                'turn_idx': 0,
-                'belief_state': belief_to_json(target_belief),
-                'turn_label': [
-                    (slot_key, slot_value) for slot_key, slot_value in target_belief.items()
-                ],
-                'transcript': sentence,
-                'system_acts': [],
-                'domain': list(domains)[0]
-            }
-
-            chosen_dialogue['dialogue'].insert(0, new_turn)
-
-            for turn_idx, turn in enumerate(chosen_dialogue['dialogue']):
-                turn['turn_idx'] = turn_idx
-
-            yield chosen_dialogue
-        else:
-            yield {
-                'dialogue_idx': _id,
-                'domains': list(domains),
-                'dialogue': [
-                    {
-                        'system_transcript': '',
-                        'turn_idx': 0,
-                        'belief_state': belief_to_json(target_belief),
-                        'turn_label': [
-                            (slot_key, slot_value) for slot_key, slot_value in target_belief.items()
-                        ],
-                        'transcript': sentence,
-                        'system_acts': [],
-                        'domain': list(domains)[0]
-                    }
-                ]
-            }
 
 class Augmenter:
     def __init__(self, only_domain=None):
