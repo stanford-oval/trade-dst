@@ -15,7 +15,7 @@ DOMAIN_INDICES = dict()
 for domain in EXPERIMENT_DOMAINS:
     DOMAIN_INDICES[domain] = len(DOMAIN_INDICES)
 def get_slot_information():
-    ontology = json.load(open("data/multi-woz/MULTIWOZ2.1/ontology.json", 'r'))
+    ontology = json.load(open("data/clean-ontology.json", 'r'))
     ontology_domains = dict([(k, v) for k, v in ontology.items() if k.split("-")[0] in EXPERIMENT_DOMAINS])
 
     slots = []

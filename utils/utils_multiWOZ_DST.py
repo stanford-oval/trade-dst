@@ -293,7 +293,7 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
             if args['except_domain_dev'] != '' and dataset == 'dev' and args['except_domain_dev'] in dial_dict['domains']:
                 continue
             if (args["except_domain"] != "" and dataset == "test" and args["except_domain"] not in dial_dict["domains"]) or \
-               (args["except_domain"] != "" and dataset != "test" and args["except_domain"] in dial_dict["domains"]):
+               (args["except_domain"] != "" and dataset != "test" and [args["except_domain"]] == dial_dict["domains"]):
                 continue
 
             # Reading data
@@ -308,20 +308,20 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
 
                 # Generate domain-dependent slot list
                 slot_temp = SLOTS
-                # if dataset == "train" or dataset == "dev":
-                #     if args["except_domain"] != "":
-                #         slot_temp = [k for k in SLOTS if args["except_domain"] not in k]
-                #         turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["except_domain"] not in k])
-                #     elif args["only_domain"] != "":
-                #         slot_temp = [k for k in SLOTS if args["only_domain"] in k]
-                #         turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["only_domain"] in k])
-                # else:
-                #     if args["except_domain"] != "":
-                #         slot_temp = [k for k in SLOTS if args["except_domain"] in k]
-                #         turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["except_domain"] in k])
-                #     elif args["only_domain"] != "":
-                #         slot_temp = [k for k in SLOTS if args["only_domain"] in k]
-                #         turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["only_domain"] in k])
+                if dataset == "train" or dataset == "dev":
+                    if args["except_domain"] != "":
+                        slot_temp = [k for k in SLOTS if args["except_domain"] not in k]
+                        turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["except_domain"] not in k])
+                    elif args["only_domain"] != "":
+                        slot_temp = [k for k in SLOTS if args["only_domain"] in k]
+                        turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["only_domain"] in k])
+                else:
+                    if args["except_domain"] != "":
+                        slot_temp = [k for k in SLOTS if args["except_domain"] in k]
+                        turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["except_domain"] in k])
+                    elif args["only_domain"] != "":
+                        slot_temp = [k for k in SLOTS if args["only_domain"] in k]
+                        turn_belief_dict = OrderedDict([(k, v) for k, v in turn_belief_dict.items() if args["only_domain"] in k])
 
                 turn_belief_list = [str(k)+'-'+str(v) for k, v in turn_belief_dict.items()]
 
