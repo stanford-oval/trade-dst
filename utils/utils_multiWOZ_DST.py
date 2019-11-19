@@ -4,7 +4,6 @@ import torch
 import torch.utils.data as data
 from collections import OrderedDict
 from embeddings import GloveEmbedding, KazumaCharEmbedding
-from tqdm import tqdm
 import os
 import pickle
 from random import shuffle
@@ -276,11 +275,25 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
             if filter_domain:
                 continue
 
+            all_domains = set(dial_dict['domains'])
+            # add sometimes missing domains to annotation
+            for turn in dial_dict['dialogue']:
+                turn_belief_dict = fix_general_label_error(turn["belief_state"], False, SLOTS)
+                for slot_key, slot_value in turn_belief_dict.items():
+                    if slot_value == 'none':
+                        continue
+                    domain, slot_name = slot_key.split('-', maxsplit=1)
+                    all_domains.add(domain)
+            dial_dict['domains'] = list(all_domains)
+            dial_dict['domains'].sort()
+
             # Unseen domain setting
             if args["only_domain"] != "" and args["only_domain"] not in dial_dict["domains"]:
                 continue
+            if args['except_domain_dev'] != '' and dataset == 'dev' and args['except_domain_dev'] in dial_dict['domains']:
+                continue
             if (args["except_domain"] != "" and dataset == "test" and args["except_domain"] not in dial_dict["domains"]) or \
-               (args["except_domain"] != "" and dataset != "test" and [args["except_domain"]] == dial_dict["domains"]): 
+               (args["except_domain"] != "" and dataset != "test" and [args["except_domain"]] == dial_dict["domains"]):
                 continue
 
             # Reading data
@@ -400,7 +413,7 @@ def dump_pretrained_emb(word2index, index2word, dump_path):
     # ssl._create_default_https_context = ssl._create_unverified_context
     embeddings = [GloveEmbedding(), KazumaCharEmbedding()]
     E = []
-    for i in tqdm(range(len(word2index.keys()))):
+    for i in range(len(word2index.keys())):
         w = index2word[i]
         e = []
         for emb in embeddings:

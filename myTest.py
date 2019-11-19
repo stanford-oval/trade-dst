@@ -26,7 +26,7 @@ def run():
 
     train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, max_word = prepare_data_seq(False, args['task'], False, batch_size=BSZ)
 
-    import pdb; pdb.set_trace()
+    # import pdb; pdb.set_trace()
 
     if args['decoder'] == 'TRADE':
         model = TRADE(

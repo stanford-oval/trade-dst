@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import os
 import numpy as np
-from tqdm import tqdm
 
 from utils.masked_cross_entropy import masked_cross_entropy_for_value
 from utils.config import args, PAD_token
@@ -182,7 +181,7 @@ class TRADE(nn.Module):
         print("STARTING EVALUATION")
         all_prediction = {}
         inverse_unpoint_slot = dict([(v, k) for k, v in self.gating_dict.items()])
-        pbar = tqdm(enumerate(dev), total=len(dev))
+        pbar = enumerate(dev)
         for j, data_dev in pbar: 
             # Encode and Decode
             eval_data = {}
@@ -208,7 +207,7 @@ class TRADE(nn.Module):
                 all_prediction[data_dev["ID"][bi]][data_dev["turn_id"][bi]] = {"turn_belief":data_dev["turn_belief"][bi]}
                 predict_belief_bsz_ptr, predict_belief_bsz_class = [], []
                 gate = torch.argmax(gates.transpose(0, 1)[bi], dim=1)
-                import pdb; pdb.set_trace()
+                # import pdb; pdb.set_trace()
 
                 # pointer-generator results
                 if args["use_gate"]:

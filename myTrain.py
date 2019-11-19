@@ -2,7 +2,6 @@ import torch
 import numpy as np
 import random
 import logging
-from tqdm import tqdm
 import shutil
 import os
 import warnings
@@ -112,7 +111,7 @@ def run():
     for epoch in range(args['max_epochs']):
         print("Epoch:{}".format(epoch))
         # Run the train function
-        pbar = tqdm(enumerate(train), total=len(train))
+        pbar = enumerate(train)
         for i, data in pbar:
             batch = {}
             # wrap all numerical values as tensors for multi-gpu training
@@ -143,7 +142,7 @@ def run():
                 if isinstance(core.scheduler, WarmupLinearSchedule):
                     core.scheduler.step()
 
-            pbar.set_description(core.print_loss()) #TODO
+        print(core.print_loss(), flush=True) #TODO
 
         if((epoch+1) % int(args['evalp']) == 0):
 

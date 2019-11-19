@@ -45,20 +45,20 @@ def preprocess(sentence):
         if word in ('.', '?', ',', '!'):
             continue
 
-        if re.match('[0-9]{,2}:[0-9]{2}', word, re.IGNORECASE):
+        if re.match('[0-9]{,2}:[0-9]{2}$', word, re.IGNORECASE):
             yield 'TIME'
-        elif re.match('\$?[0-9]+', word, re.IGNORECASE):
+        elif re.match('\$?[0-9]+$', word, re.IGNORECASE):
             if len(word) >= 9:
                 yield 'PHONE_NUMBER'
             else:
                 yield 'NUMBER'
-        elif re.match('#[0-9a-z]+', word, re.IGNORECASE):
+        elif re.match('#[0-9a-z]+$', word, re.IGNORECASE):
             yield 'RESERVATION_CODE'
-        elif re.match('tr[0-9]+', word, re.IGNORECASE):
+        elif re.match('tr[0-9]+$', word, re.IGNORECASE):
             yield 'TRAIN_NUMBER'
-        elif re.match('cb[0-9a-z]{4,}', word, re.IGNORECASE):
+        elif re.match('cb[0-9a-z]{4,}$', word, re.IGNORECASE):
             yield 'POST_CODE'
-        elif re.match('([a-z]*[0-9]+[a-z]*)+', word, re.IGNORECASE): # word with number
+        elif re.match('([a-z]*[0-9]+[a-z]*)+$', word, re.IGNORECASE): # word with number
             yield 'CONFIRMATION_NUMBER'
         else:
             yield word
