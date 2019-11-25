@@ -6,6 +6,7 @@ import shutil
 import os
 import warnings
 import sys
+from tqdm import tqdm
 
 from torch.optim import lr_scheduler
 from transformers.optimization import AdamW, WarmupLinearSchedule
@@ -32,7 +33,7 @@ def run():
         from utils.utils_multiWOZ_DST import prepare_data_seq
         early_stop = None
     else:
-        print("You need to provide the --dataset information")
+        logger.info("You need to provide the --dataset information")
         exit(1)
 
     # Configure models and load data
@@ -109,9 +110,12 @@ def run():
     core = model.module if hasattr(model, 'module') else model
 
     for epoch in range(args['max_epochs']):
-        print("Epoch:{}".format(epoch))
+        logger.info("Epoch:{}".format(epoch))
         # Run the train function
-        pbar = enumerate(train)
+        if args['is_kube']:
+            pbar = enumerate(train)
+        else:
+            pbar = tqdm(enumerate(train), total=len(train))
         for i, data in pbar:
             batch = {}
             # wrap all numerical values as tensors for multi-gpu training
@@ -142,7 +146,7 @@ def run():
                 if isinstance(core.scheduler, WarmupLinearSchedule):
                     core.scheduler.step()
 
-        print(core.print_loss(), flush=True) #TODO
+        logger.info(core.print_loss()) #TODO
 
         if((epoch+1) % int(args['evalp']) == 0):
 
@@ -158,7 +162,7 @@ def run():
                 cnt += 1
 
             if(cnt == args["patience"] or (acc==1.0 and early_stop==None)):
-                print("Ran out of patient, early stop...")
+                logger.info("Ran out of patient, early stop...")
                 break
 
 if __name__ == '__main__':

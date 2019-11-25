@@ -7,14 +7,21 @@ import torch
 import torch.nn as nn
 import os
 import numpy as np
+import logging
 
 from utils.masked_cross_entropy import masked_cross_entropy_for_value
 from utils.config import args, PAD_token
 from models.modules import TPRencoder_LSTM
+from tqdm import tqdm
 
 from transformers.modeling_bert import BertModel
 from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from transformers.optimization import AdamW, WarmupLinearSchedule
+
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class TRADE(nn.Module):
     def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, t_total, device, nb_train_vocab=0):
@@ -47,7 +54,7 @@ class TRADE(nn.Module):
             self.decoder = Generator(self.lang, None, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device, self.cell_type)
 
         if path:
-            print("MODEL {} LOADED".format(str(path)))
+            logger.info("MODEL {} LOADED".format(str(path)))
             trained_encoder = torch.load(str(path)+'/enc.th', map_location=self.device)
             trained_decoder = torch.load(str(path)+'/dec.th', map_location=self.device)
 
@@ -178,10 +185,13 @@ class TRADE(nn.Module):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
         self.decoder.train(False)  
-        print("STARTING EVALUATION")
+        logger.info("STARTING EVALUATION")
         all_prediction = {}
         inverse_unpoint_slot = dict([(v, k) for k, v in self.gating_dict.items()])
-        pbar = enumerate(dev)
+        if args['is_kube']:
+            pbar = enumerate(dev)
+        else:
+            pbar = tqdm(enumerate(dev), total=len(dev))
         for j, data_dev in pbar: 
             # Encode and Decode
             eval_data = {}
@@ -250,12 +260,12 @@ class TRADE(nn.Module):
             if save_dir is not "" and not os.path.exists(save_dir):
                 os.mkdir(save_dir)
             json.dump(all_prediction, open(os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string)), 'w'), indent=4)
-            print("saved generated samples", os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string)))
+            logger.info("saved generated samples: {}".format(os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string))))
 
         joint_acc_score_ptr, F1_score_ptr, turn_acc_score_ptr = self.evaluate_metrics(all_prediction, "pred_bs_ptr", slot_temp)
 
         evaluation_metrics = {"Joint Acc":joint_acc_score_ptr, "Turn Acc":turn_acc_score_ptr, "Joint F1":F1_score_ptr}
-        print(evaluation_metrics)
+        logger.info(evaluation_metrics)
 
         # Set back to training mode
         self.encoder.train(True)
@@ -267,12 +277,12 @@ class TRADE(nn.Module):
         if (early_stop == 'F1'):
             if (F1_score >= matric_best):
                 self.save_model('ENTF1-{:.4f}'.format(F1_score))
-                print("MODEL SAVED")  
+                logger.info("MODEL SAVED")
             return F1_score
         else:
             if (joint_acc_score >= matric_best):
                 self.save_model('ACC-{:.4f}'.format(joint_acc_score))
-                print("MODEL SAVED")
+                logger.info("MODEL SAVED")
             return joint_acc_score
 
     def evaluate_metrics(self, all_prediction, from_which, slot_temp):
@@ -336,6 +346,7 @@ class TRADE(nn.Module):
                 precision, recall, F1, count = 0, 0, 0, 1
         return F1, recall, precision, count
 
+
 class BERTEncoder(nn.Module):
     def __init__(self, hidden_size, dropout, device):
         super(BERTEncoder, self).__init__()
@@ -366,6 +377,7 @@ class BERTEncoder(nn.Module):
         hidden = self.proj(pooled_output)
 
         return output, hidden
+
 
 class EncoderTPRNN(nn.Module):
     def __init__(self, vocab_size, hidden_size, dropout, device, cell_type, nSymbols, nRoles, dSymbols, dRoles, temperature, scale_val, train_scale, n_layers=1):
@@ -399,7 +411,7 @@ class EncoderTPRNN(nn.Module):
             new = self.embedding.weight.data.new
             self.embedding.weight.data.copy_(new(E))
             self.embedding.weight.requires_grad = True
-            print("Encoder embedding requires_grad", self.embedding.weight.requires_grad)
+            logger.info("Encoder embedding requires_grad: {}".format(self.embedding.weight.requires_grad))
 
         if args["fix_embedding"]:
             self.embedding.weight.requires_grad = False
@@ -416,6 +428,7 @@ class EncoderTPRNN(nn.Module):
 
         return outputs, hidden.unsqueeze(0)
 
+
 class EncoderRNN(nn.Module):
     def __init__(self, vocab_size, hidden_size, dropout, device, cell_type, n_layers=1):
         super(EncoderRNN, self).__init__()
@@ -431,6 +444,7 @@ class EncoderRNN(nn.Module):
             self.rnn = nn.GRU(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True, batch_first=True)
         elif self.cell_type == 'LSTM':
             self.rnn = nn.LSTM(hidden_size, hidden_size, n_layers, dropout=dropout, bidirectional=True, batch_first=True)
+        self.rnn.flatten_parameters()
         # self.domain_W = nn.Linear(hidden_size, nb_domain)
 
         if args["load_embedding"]:
@@ -439,7 +453,7 @@ class EncoderRNN(nn.Module):
             new = self.embedding.weight.data.new
             self.embedding.weight.data.copy_(new(E))
             self.embedding.weight.requires_grad = True
-            print("Encoder embedding requires_grad", self.embedding.weight.requires_grad)
+            logger.info("Encoder embedding requires_grad: {}".format(self.embedding.weight.requires_grad))
 
         if args["fix_embedding"]:
             self.embedding.weight.requires_grad = False
@@ -490,7 +504,7 @@ class Generator(nn.Module):
                 new = self.embedding.weight.data.new
                 self.embedding.weight.data.copy_(new(E))
                 self.embedding.weight.requires_grad = True
-                print("Encoder embedding requires_grad", self.embedding.weight.requires_grad)
+                logger.info("Encoder embedding requires_grad: {}".format(self.embedding.weight.requires_grad))
 
             if args["fix_embedding"]:
                 self.embedding.weight.requires_grad = False
@@ -535,7 +549,7 @@ class Generator(nn.Module):
             else:
                 self.domain_emb = torch.zeros((len(domains), hidden_size), requires_grad=False)
 
-            print('Using pretrained domain embedding', self.domain_emb.size())
+            logger.info('Using pretrained domain embedding: {}'.format(self.domain_emb.size()))
 
         self.slot_w2i = {}
         for slot in self.slots:

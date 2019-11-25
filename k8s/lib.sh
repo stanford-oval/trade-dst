@@ -67,7 +67,7 @@ parse_args() {
 }
 
 requote() {
-  for arg ; do
+  for arg in '"$@"'; do
     echo -n " \""$(sed 's/["\\]/\\\0/g' <<<"$arg")"\""
   done
 }

@@ -90,6 +90,8 @@ parser.add_argument('--log_dir', help='Save logs here', required=False, default=
 parser.add_argument('--data_dir', help='Load data from here', required=False, default="./data", type=str)
 parser.add_argument("--delete_ok", type=str2bool, default=False, help='whether to delete the result directory if it already exists')
 
+parser.add_argument("--is_kube", type=str2bool, default=True, help="turn on specific requirements for kubernetes (e.g. having progress bar, ...)")
+
 # bert parameters
 parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")
 parser.add_argument("--do_lower_case", type=str2bool, default=False, help="Set this flag if you are using an uncased model.")

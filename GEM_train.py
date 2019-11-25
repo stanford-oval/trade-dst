@@ -3,6 +3,7 @@ import torch
 import numpy as np
 import quadprog
 from copy import deepcopy
+import logging
 
 ## TAKEN FROM https://github.com/facebookresearch/GradientEpisodicMemory/blob/master/model/gem.py
 def store_grad(pp, grads, grad_dims, task_id):
@@ -79,7 +80,7 @@ args["HDD"] = HDD
 if args['dataset']=='multiwoz':
     from utils.utils_multiWOZ_DST import *
 else:
-    print("You need to provide the --dataset information")
+    logger.info("You need to provide the --dataset information")
 
 _, _, test, test_special, lang, SLOTS_LIST, gating_dict, max_word = prepare_data_seq(True, args['task'], False, batch_size=BSZ)
 
@@ -105,9 +106,9 @@ model = globals()[args["decoder"]](
     slots=SLOTS_LIST,
     gating_dict=gating_dict)
 
-print("4 domains test set length used EVAL",len(test_special)*BSZ)
-print("4 domains train set length used for GEM",len(train_GEM)*64)
-print("1 domains train set length",len(train_single)*BSZ)
+logger.info("4 domains test set length used EVAL",len(test_special)*BSZ)
+logger.info("4 domains train set length used for GEM",len(train_GEM)*64)
+logger.info("1 domains train set length",len(train_single)*BSZ)
 
 
 n_tasks = 2 ## 1 to store 4 dom and 1 for the final task
@@ -120,7 +121,7 @@ avg_best, cnt, acc = 0.0, 0, 0.0
 weights_best = deepcopy(model.state_dict())
 try:
     for epoch in range(100):
-        print("Epoch:{}".format(epoch))  
+        logger.info("Epoch:{}".format(epoch))
         # Run the train function
         pbar = tqdm(enumerate(train_single),total=len(train_single))
         for i, data in pbar:
@@ -159,7 +160,7 @@ try:
             else:
                 cnt+=1
             if(cnt == 3 or (acc==1.0 and args["earlyStop"]==None)): 
-                print("Ran out of patient, early stop...")  
+                logger.info("Ran out of patient, early stop...")
                 break 
 except KeyboardInterrupt:
     pass
@@ -168,10 +169,10 @@ model.load_state_dict({ name: weights_best[name] for name in weights_best })
 model.eval()
 
 # After Fine tuning...
-print("[Info] After Fine Tune ...")
-print("[Info] Test Set on 4 domains...")
+logger.info("[Info] After Fine Tune ...")
+logger.info("[Info] Test Set on 4 domains...")
 acc_test_4d = model.evaluate(test_special, 1e7, SLOTS_LIST[2]) 
-print("[Info] Test Set on 1 domain {} ...".format(except_domain))
+logger.info("[Info] Test Set on 1 domain {} ...".format(except_domain))
 acc_test = model.evaluate(test_single, 1e7, SLOTS_LIST[3])
 
 

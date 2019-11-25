@@ -12,6 +12,7 @@ from utils.config import args, PAD_token, SOS_token, EOS_token, UNK_token
 from .fix_label import fix_general_label_error
 from utils.data_utils import convert_examples_to_features
 from transformers.tokenization_bert import BertTokenizer
+from tqdm import tqdm
 
 EXPERIMENT_DOMAINS = ["hotel", "train", "restaurant", "attraction", "taxi"]
 
@@ -413,7 +414,11 @@ def dump_pretrained_emb(word2index, index2word, dump_path):
     # ssl._create_default_https_context = ssl._create_unverified_context
     embeddings = [GloveEmbedding(), KazumaCharEmbedding()]
     E = []
-    for i in range(len(word2index.keys())):
+    if args['is_kube']:
+        enumerator = range(len(word2index.keys()))
+    else:
+        enumerator = tqdm(range(len(word2index.keys())))
+    for i in enumerator:
         w = index2word[i]
         e = []
         for emb in embeddings:

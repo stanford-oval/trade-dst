@@ -23,6 +23,7 @@ yamls
 pytorch_model_*
 __pycache__
 log*/
+graph.gv*
 
 # Distribution / packaging
 .Python
