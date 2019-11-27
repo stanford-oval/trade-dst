@@ -24,7 +24,7 @@ def run():
     else:
         print("You need to provide the --dataset information")
 
-    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, max_word = prepare_data_seq(False, args['task'], False, batch_size=BSZ)
+    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = prepare_data_seq(False, args['task'], False, batch_size=BSZ)
 
     # import pdb; pdb.set_trace()
 
@@ -38,6 +38,7 @@ def run():
             dropout=0,
             slots=SLOTS_LIST,
             gating_dict=gating_dict,
+            domain_dict=domain_dict,
             t_total=-1,
             device='cpu',
             nb_train_vocab=max_word)

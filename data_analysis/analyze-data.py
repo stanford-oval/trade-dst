@@ -143,8 +143,6 @@ def generate_turn_frame(data):
     slot_updates = dict()
     
     for dialogue in data:
-        
-
         d_idx = dialogue["dialogue_idx"].split('.')[0]
         
         for t_idx, turn in enumerate(dialogue["dialogue"]):
@@ -164,7 +162,6 @@ def generate_turn_frame(data):
     slot_updates = pd.read_json(json.dumps(slot_updates)).transpose()
     return slot_updates
 
-    
 def select_domains(frame, domain_list):
     
     return frame[frame.domain.isin(domain_list)]

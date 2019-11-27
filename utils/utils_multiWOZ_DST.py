@@ -16,7 +16,7 @@ from tqdm import tqdm
 
 EXPERIMENT_DOMAINS = ["hotel", "train", "restaurant", "attraction", "taxi"]
 
-class Lang:
+class Lang(object):
     def __init__(self):
         self.word2index = {}
         self.index2word = {PAD_token: "PAD", SOS_token: "SOS", EOS_token: "EOS", UNK_token: 'UNK'}
@@ -59,6 +59,7 @@ class Dataset(data.Dataset):
         self.dialog_history = data_info['dialog_history']
         self.turn_belief = data_info['turn_belief']
         self.gating_label = data_info['gating_label']
+        self.domain_label = data_info['domain_label']
         self.turn_uttr = data_info['turn_uttr']
         self.generate_y = data_info["generate_y"]
         self.sequicity = sequicity
@@ -73,6 +74,7 @@ class Dataset(data.Dataset):
         turn_id = self.turn_id[index]
         turn_belief = self.turn_belief[index]
         gating_label = self.gating_label[index]
+        domain_label = self.domain_label[index]
         turn_uttr = self.turn_uttr[index]
         turn_domain = self.preprocess_domain(self.turn_domain[index])
         generate_y = self.generate_y[index]
@@ -80,12 +82,12 @@ class Dataset(data.Dataset):
         context_plain = self.dialog_history[index]
         context = self.preprocess(context_plain, self.src_word2id)
 
-        
         item_info = {
             "ID":ID, 
             "turn_id":turn_id, 
             "turn_belief":turn_belief, 
-            "gating_label":gating_label, 
+            "gating_label":gating_label,
+            "domain_label":domain_label,
             "context":context, 
             "context_plain":context_plain, 
             "turn_uttr_plain":turn_uttr, 
@@ -210,6 +212,7 @@ def collate_fn(data, tokenizer=None):
     context_plain_seqs = [" ".join(context_plain) for context_plain in context_plain_seqs]
     y_seqs, y_lengths = merge_multi_response(item_info["generate_y"])
     gating_label = torch.tensor(item_info["gating_label"])
+    domain_label = torch.tensor(item_info["domain_label"])
     turn_domain = torch.tensor(item_info["turn_domain"])
 
     # BERT features
@@ -232,6 +235,7 @@ def collate_fn(data, tokenizer=None):
     item_info["context_plain"] = context_plain_seqs
     item_info["context_len"] = src_lengths
     item_info["gating_label"] = gating_label
+    item_info["domain_label"] = domain_label
     item_info["turn_domain"] = turn_domain
     item_info["generate_y"] = y_seqs
     item_info["y_lengths"] = y_lengths
@@ -242,7 +246,7 @@ def collate_fn(data, tokenizer=None):
 
     return item_info
 
-def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity, training, max_line = None):
+def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_lang, sequicity, training, max_line = None):
     print(("Reading from {}".format(file_name)))
     data = []
     max_resp_len, max_value_len = 0, 0
@@ -329,9 +333,16 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
                 if (args["all_vocab"] or dataset=="train") and training:
                     mem_lang.index_words(turn_belief_dict, 'belief')
 
-                class_label, generate_y, slot_mask, gating_label  = [], [], [], []
+                class_label, generate_y, slot_mask, gating_label, domain_label = [], [], [], [], []
                 start_ptr_label, end_ptr_label = [], []
                 for slot in slot_temp:
+                    domain, slot_name = slot_key.split('-', maxsplit=1)
+                    if domain == turn_domain:
+                        domain_label.append(domain_dict['present'])
+                    else:
+                        domain_label.append(domain_dict['absent'])
+
+
                     if slot in turn_belief_dict.keys(): 
                         generate_y.append(turn_belief_dict[slot])
 
@@ -356,7 +367,8 @@ def read_langs(file_name, gating_dict, SLOTS, dataset, lang, mem_lang, sequicity
                     "turn_id":turn_id, 
                     "dialog_history":source_text, 
                     "turn_belief":turn_belief_list,
-                    "gating_label":gating_label, 
+                    "gating_label":gating_label,
+                    "domain_label":domain_label,
                     "turn_uttr":turn_uttr_strip, 
                     'generate_y':generate_y
                     }
@@ -456,6 +468,7 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     ontology = json.load(open(args['data_dir'] + "/multi-woz/MULTIWOZ2.1/ontology.json", 'r'))
     ALL_SLOTS = get_slot_information(ontology)
     gating_dict = {"ptr":0, "dontcare":1, "none":2}
+    domain_dict = {"present":0, "absent":1}
     # Vocabulary
     lang, mem_lang = Lang(), Lang()
     lang.index_words(ALL_SLOTS, 'slot')
@@ -465,12 +478,12 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
 
 
     if training:
-        pair_train, train_max_len, slot_train = read_langs(file_train, gating_dict, ALL_SLOTS, "train", lang, mem_lang, sequicity, training)
+        pair_train, train_max_len, slot_train = read_langs(file_train, gating_dict, domain_dict, ALL_SLOTS, "train", lang, mem_lang, sequicity, training)
         train = get_seq(pair_train, lang, mem_lang, batch_size, True, sequicity, tokenizer)
         nb_train_vocab = lang.n_words
-        pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
+        pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, domain_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
         dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
-        pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
+        pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, domain_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
         test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
         if os.path.exists(folder_name+lang_name) and os.path.exists(folder_name+mem_lang_name):
             print("[Info] Loading saved lang files...")
@@ -494,14 +507,14 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
             mem_lang = pickle.load(handle)
 
         pair_train, train_max_len, slot_train, train, nb_train_vocab = [], 0, {}, [], 0
-        pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
+        pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, domain_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
         dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
-        pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
+        pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, domain_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
         test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
 
     test_4d = []
     if args['except_domain']!="":
-        pair_test_4d, _, _ = read_langs(file_test, gating_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
+        pair_test_4d, _, _ = read_langs(file_test, gating_dict, domain_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
         test_4d  = get_seq(pair_test_4d, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
 
     max_word = max(train_max_len, dev_max_len, test_max_len) + 1
@@ -520,8 +533,7 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
     print("[Test Set Slots]: Number is {} in total".format(str(len(SLOTS_LIST[3]))))
     print(SLOTS_LIST[3])
     LANG = [lang, mem_lang]
-    return train, dev, test, test_4d, LANG, SLOTS_LIST, gating_dict, nb_train_vocab
-
+    return train, dev, test, test_4d, LANG, SLOTS_LIST, gating_dict, domain_dict, nb_train_vocab
 
 
 class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):

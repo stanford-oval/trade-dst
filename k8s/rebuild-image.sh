@@ -8,6 +8,9 @@ check_config "IMAGE COMMON_IMAGE"
 set -e
 set -x
 
+# login to aws
+aws ecr get-login --no-include-email | bash
+
 #docker build -t ${COMMON_IMAGE} \
 #  -f ${srcdir}/Dockerfile.base ${srcdir}/..
 #docker push ${COMMON_IMAGE}

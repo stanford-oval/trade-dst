@@ -24,7 +24,7 @@ logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s
 logger = logging.getLogger(__name__)
 
 class TRADE(nn.Module):
-    def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, t_total, device, nb_train_vocab=0):
+    def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, domain_dict, t_total, device, nb_train_vocab=0):
         super(TRADE, self).__init__()
         self.name = "TRADE"
         self.task = task
@@ -36,22 +36,26 @@ class TRADE(nn.Module):
         self.slots = slots[0]
         self.slot_temp = slots[2]
         self.gating_dict = gating_dict
+        self.domain_dict = domain_dict
         self.device = device
         self.nb_gate = len(gating_dict)
+        self.gate_weight = args['gate_weight']
+        self.nb_domain = len(domain_dict)
+        self.domain_weight = args['domain_weight']
         self.cross_entorpy = nn.CrossEntropyLoss()
         self.cell_type = args['cell_type']
 
         if args['encoder'] == 'RNN':
             self.encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type)
-            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device, self.cell_type)
+            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.nb_domain, self.device, self.cell_type)
         elif args['encoder'] == 'TPRNN':
             self.encoder = EncoderTPRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type,
                                         args['nSymbols'], args['nRoles'], args['dSymbols'], args['dRoles'],
                                         args['temperature'], args['scale_val'], args['train_scale'])
-            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device, self.cell_type)
+            self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.nb_domain, self.device, self.cell_type)
         else:
             self.encoder = BERTEncoder(hidden_size, self.dropout, self.device)
-            self.decoder = Generator(self.lang, None, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.device, self.cell_type)
+            self.decoder = Generator(self.lang, None, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.nb_domain, self.device, self.cell_type)
 
         if path:
             logger.info("MODEL {} LOADED".format(str(path)))
@@ -97,7 +101,7 @@ class TRADE(nn.Module):
         torch.save(self.decoder, directory + '/dec.th')
     
     def reset(self):
-        self.loss, self.print_every, self.loss_ptr, self.loss_gate, self.loss_class = 0, 1, 0, 0, 0
+        self.loss, self.print_every, self.loss_ptr, self.loss_gate, self.loss_domain, self.loss_class = 0, 1, 0, 0, 0, 0
 
     def forward(self, data, clip, slot_temp, reset=0, n_gpu=0):
         if reset: self.reset()
@@ -106,18 +110,32 @@ class TRADE(nn.Module):
         
         # Encode and Decode
         use_teacher_forcing = random.random() < args["teacher_forcing_ratio"]
-        all_point_outputs, gates, words_point_out, words_class_out = self.encode_and_decode(data, use_teacher_forcing, slot_temp)
+        all_point_outputs, gates, domains, words_point_out, words_class_out = self.encode_and_decode(data, use_teacher_forcing, slot_temp)
+
+        ignore_gate_idx = [v for k, v in self.gating_dict.items() if k in ['dontcare', 'none']]
+        ignore_domain_idx = [v for k, v in self.domain_dict.items() if k in ['absent']]
+
+        gates_mask = None
+        domains_mask = None
+        if args['gate_mask']:
+            gates_mask = torch.argmax(gates.transpose(0, 1).contiguous(), dim=-1)
+        if args['domain_mask']:
+            domains_mask = torch.argmax(domains.transpose(0, 1).contiguous(), dim=-1)
 
         loss_ptr = masked_cross_entropy_for_value(
             all_point_outputs.transpose(0, 1).contiguous(),
-            data["generate_y"].contiguous(), #[:,:len(self.point_slots)].contiguous(),
-            data["y_lengths"]) #[:,:len(self.point_slots)])
+            data["generate_y"].contiguous(),
+            data["y_lengths"],
+            gates_mask,
+            domains_mask)
         loss_gate = self.cross_entorpy(gates.transpose(0, 1).contiguous().view(-1, gates.size(-1)), data["gating_label"].contiguous().view(-1))
+        loss_domain = self.cross_entorpy(domains.transpose(0, 1).contiguous().view(-1, domains.size(-1)), data["domain_label"].contiguous().view(-1))
 
+        loss = loss_ptr
         if args["use_gate"]:
-            loss = loss_ptr + loss_gate
-        else:
-            loss = loss_ptr
+            loss += self.gate_weight * loss_gate
+        if args["use_domain"]:
+            loss += self.domain_weight * loss_domain
 
         self.loss_grad = loss
         self.loss_ptr_to_bp = loss_ptr
@@ -126,6 +144,7 @@ class TRADE(nn.Module):
         self.loss += loss.item()
         self.loss_ptr += loss_ptr.item()
         self.loss_gate += loss_gate.item()
+        self.loss_domain += loss_domain.item()
 
         return self.loss_grad
 
@@ -175,11 +194,11 @@ class TRADE(nn.Module):
         self.copy_list = data['context_plain']
         max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
 
-        all_point_outputs, all_gate_outputs, words_point_out, words_class_out = self.decoder.forward(batch_size, \
+        all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out = self.decoder(batch_size, \
             encoded_hidden, encoded_outputs, data['context_len'], story, max_res_len, data['generate_y'], \
             use_teacher_forcing, slot_temp)
 
-        return all_point_outputs, all_gate_outputs, words_point_out, words_class_out
+        return all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out
 
     def evaluate(self, dev, matric_best, slot_temp, device, save_dir="", save_string = "", early_stop=None):
         # Set to not-training mode to disable dropout
@@ -209,7 +228,7 @@ class TRADE(nn.Module):
                     pass
             batch_size = len(data_dev['context_len'])
             with torch.no_grad():
-                _, gates, words, class_words = self.encode_and_decode(eval_data, False, slot_temp)
+                _, gates, domains, words, class_words = self.encode_and_decode(eval_data, False, slot_temp)
 
             for bi in range(batch_size):
                 if data_dev["ID"][bi] not in all_prediction.keys():
@@ -217,14 +236,17 @@ class TRADE(nn.Module):
                 all_prediction[data_dev["ID"][bi]][data_dev["turn_id"][bi]] = {"turn_belief":data_dev["turn_belief"][bi]}
                 predict_belief_bsz_ptr, predict_belief_bsz_class = [], []
                 gate = torch.argmax(gates.transpose(0, 1)[bi], dim=1)
+                domain = torch.argmax(domains.transpose(0, 1)[bi], dim=1)
                 # import pdb; pdb.set_trace()
 
                 # pointer-generator results
-                if args["use_gate"]:
-                    for si, sg in enumerate(gate):
-                        if sg==self.gating_dict["none"]:
+                use_gate = args["use_gate"]
+                use_domain = args["use_domain"]
+                if use_gate or use_domain:
+                    for si, (sg, sd) in enumerate(zip(gate, domain)):
+                        if (sg==self.gating_dict["none"] and use_gate) or (sd==self.domain_dict["absent"] and use_domain):
                             continue
-                        elif sg==self.gating_dict["ptr"]:
+                        elif (sg==self.gating_dict["ptr"] and use_gate) and ((not use_domain) or (sd==self.domain_dict["present"] and use_domain)):
                             pred = np.transpose(words[si])[bi]
                             st = []
                             for e in pred:
@@ -235,8 +257,10 @@ class TRADE(nn.Module):
                                 continue
                             else:
                                 predict_belief_bsz_ptr.append(slot_temp[si]+"-"+str(st))
-                        else:
+                        elif (not use_domain) or (sd==self.domain_dict["present"] and use_domain):
                             predict_belief_bsz_ptr.append(slot_temp[si]+"-"+inverse_unpoint_slot[sg.item()])
+                        else:
+                            continue
                 else:
                     for si, _ in enumerate(gate):
                         pred = np.transpose(words[si])[bi]
@@ -489,7 +513,7 @@ class EncoderRNN(nn.Module):
 
 
 class Generator(nn.Module):
-    def __init__(self, lang, shared_emb, vocab_size, hidden_size, dropout, slots, nb_gate, device, cell_type):
+    def __init__(self, lang, shared_emb, vocab_size, hidden_size, dropout, slots, nb_gate, nb_domain, device, cell_type):
         super(Generator, self).__init__()
         self.vocab_size = vocab_size
         self.lang = lang
@@ -516,6 +540,7 @@ class Generator(nn.Module):
         elif self.cell_type == 'LSTM':
             self.rnn = nn.LSTM(hidden_size, hidden_size, dropout=dropout)
         self.nb_gate = nb_gate
+        self.nb_domain = nb_domain
         self.hidden_size = hidden_size
         self.W_ratio = nn.Linear(3*hidden_size, 1)
         self.W_slot_embed = nn.Linear(2*hidden_size, hidden_size)
@@ -525,7 +550,8 @@ class Generator(nn.Module):
         self.device = device
 
 
-        self.W_gate = nn.Linear(hidden_size, nb_gate)
+        self.W_gate = nn.Linear(hidden_size, self.nb_gate)
+        self.W_domain = nn.Linear(hidden_size, self.nb_domain)
 
         # Create independent slot embeddings
         if args['pretrain_domain_embeddings']:
@@ -564,6 +590,7 @@ class Generator(nn.Module):
     def forward(self, batch_size, encoded_hidden, encoded_outputs, encoded_lens, story, max_res_len, target_batches, use_teacher_forcing, slot_temp):
         all_point_outputs = torch.zeros(len(slot_temp), batch_size, max_res_len, self.vocab_size, device=self.device)
         all_gate_outputs = torch.zeros(len(slot_temp), batch_size, self.nb_gate, device=self.device)
+        all_domain_outputs = torch.zeros(len(slot_temp), batch_size, self.nb_domain, device=self.device)
 
         # Get the slot embedding 
         slot_emb_dict = {}
@@ -589,7 +616,6 @@ class Generator(nn.Module):
             slot_emb = self.Slot_emb(slot_w2idx)
 
             # Combine two embeddings as one query
-            self.W_slot_embed
             if args['merge_embed'] == 'sum':
                 combined_emb = domain_emb + slot_emb
             elif args['merge_embed'] == 'mean':
@@ -618,6 +644,7 @@ class Generator(nn.Module):
 
                 if wi == 0: 
                     all_gate_outputs = torch.reshape(self.W_gate(context_vec), all_gate_outputs.size())
+                    all_domain_outputs = torch.reshape(self.W_domain(context_vec), all_domain_outputs.size())
 
                 p_vocab = self.attend_vocab(self.embedding.weight, hidden.squeeze(0))
                 p_gen_vec = torch.cat([dec_state.squeeze(0), context_vec, decoder_input], -1)
@@ -658,6 +685,7 @@ class Generator(nn.Module):
                     context_vec, logits, prob = self.attend(encoded_outputs, hidden.squeeze(0), encoded_lens)
                     if wi == 0: 
                         all_gate_outputs[counter] = self.W_gate(context_vec)
+                        all_domain_outputs[counter] = self.W_domain(context_vec)
                     p_vocab = self.attend_vocab(self.embedding.weight, hidden.squeeze(0))
                     p_gen_vec = torch.cat([dec_state.squeeze(0), context_vec, decoder_input], -1)
                     vocab_pointer_switches = self.sigmoid(self.W_ratio(p_gen_vec))
@@ -677,7 +705,7 @@ class Generator(nn.Module):
                 counter += 1
                 words_point_out.append(words)
         
-        return all_point_outputs, all_gate_outputs, words_point_out, []
+        return all_point_outputs, all_gate_outputs, all_domain_outputs, words_point_out, []
 
     def attend(self, seq, cond, lens):
         """

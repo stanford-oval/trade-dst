@@ -120,10 +120,12 @@ def masked_cross_entropy_for_slot(logits, target, mask, use_softmax=True):
     # print("loss inside", loss)
     return loss
 
-def masked_cross_entropy_for_value(logits, target, mask):
+def masked_cross_entropy_for_value(logits, target, mask, gates_mask, domains_mask):
     # logits: b * |s| * m * |v|
     # target: b * |s| * m
     # mask:   b * |s|
+    # gates_mask:   b * |s|
+    # domains_mask:   b * |s|
     logits_flat = logits.view(-1, logits.size(-1)) ## -1 means infered from other dimentions
     # print(logits_flat.size())
     log_probs_flat = torch.log(logits_flat)
@@ -132,20 +134,28 @@ def masked_cross_entropy_for_value(logits, target, mask):
     # print("target_flat", target_flat)
     losses_flat = -torch.gather(log_probs_flat, dim=1, index=target_flat)
     losses = losses_flat.view(*target.size()) # b * |s| * m
-    loss = masking(losses, mask)
+    loss = masking(losses, mask, gates_mask, domains_mask)
     return loss
 
-def masking(losses, mask):
+def masking(losses, mask, gates_mask=None, domains_mask=None):
     mask_ = []
     batch_size = mask.size(0)
     max_len = losses.size(2)
     for si in range(mask.size(1)):
+        gate_masking = torch.ones((batch_size, max_len))
+        domain_masking = torch.ones((batch_size, max_len))
+        if gates_mask is not None:
+            gate_masking = (1 - gates_mask[:, si]).unsqueeze(1).expand(batch_size, max_len)
+        if domains_mask is not None:
+            domain_masking = (1 - domains_mask[:, si]).unsqueeze(1).expand(batch_size, max_len)
         seq_range = torch.arange(0, max_len).long()
         seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, max_len)
         if mask[:,si].is_cuda:
             seq_range_expand = seq_range_expand.cuda()
+            gate_masking = gate_masking.cuda()
+            domain_masking = domain_masking.cuda()
         seq_length_expand = mask[:, si].unsqueeze(1).expand_as(seq_range_expand)
-        mask_.append( (seq_range_expand < seq_length_expand) )
+        mask_.append( (seq_range_expand < seq_length_expand).long() * gate_masking * domain_masking)
     mask_ = torch.stack(mask_)
     mask_ = mask_.transpose(0, 1)
     if losses.is_cuda:

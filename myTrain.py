@@ -38,7 +38,7 @@ def run():
 
     # Configure models and load data
     avg_best, cnt, acc = 0.0, 0, 0.0
-    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, max_word = prepare_data_seq(True, args['task'], False, batch_size=int(args['batch']))
+    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = prepare_data_seq(True, args['task'], False, batch_size=int(args['batch']))
 
     if os.path.exists(args['log_dir']):
         if args['delete_ok']:
@@ -88,6 +88,7 @@ def run():
         dropout=float(args['drop']),
         slots=SLOTS_LIST,
         gating_dict=gating_dict,
+        domain_dict=domain_dict,
         t_total=num_train_steps,
         nb_train_vocab=max_word,
         device=device,
