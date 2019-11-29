@@ -155,6 +155,22 @@ def remove_none_slots(label_dict):
     return new_label_dict
 
 
+def compute_prefixes(data):
+    prefixes = []
+
+    for dialogue in data:
+        domains = set()
+        for turn in dialogue['dialogue']:
+            turn_idx = turn['turn_idx']
+
+            if 'anything else' in turn['system_transcript']:
+               prefixes.append((dialogue, turn_idx, list(domains)))
+
+            domains.add(turn['domain'])
+
+    return prefixes
+
+
 def compute_continuations(data, strict_signature=False):
     continuations = defaultdict(list)
 
@@ -263,9 +279,12 @@ def add_continuation(continuations, synth_dialogue, strict_signature=False):
 
         return chosen_dialogue
     else:
-        #print(compute_signature(target_belief, strict=strict_signature), file=sys.stderr)
-        #return None
-        return copy.deepcopy(synth_dialogue)
+        if coin(0.1):
+            #print(compute_signature(target_belief, strict=strict_signature), file=sys.stderr)
+            #return None
+            return copy.deepcopy(synth_dialogue)
+        else:
+            return None
 
 
 def add_prefix(prefixes, new_dialogue):
@@ -343,7 +362,7 @@ def process_synthetic(prefixes, continuations, from_file, only_domain=None, incl
         if only_domain is not None and only_domain not in domains:
             continue
 
-        if random.random() < 0.5:
+        if coin(0.5):
             continue
 
         synth_dialogue = {

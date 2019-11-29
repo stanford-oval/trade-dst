@@ -5,7 +5,7 @@ import json
 import random
 
 from utils.fix_label import fix_general_label_error
-from utils.augment import EXPERIMENT_DOMAINS, ALL_SLOTS, ReplaceBag, compute_continuations, process_synthetic_json, \
+from utils.augment import EXPERIMENT_DOMAINS, ALL_SLOTS, ReplaceBag, compute_prefixes, compute_continuations, process_synthetic_json, \
     apply_replacement, belief_to_json, remove_none_slots, Augmenter
 
 random.seed(12345)
@@ -56,22 +56,6 @@ def load_data(except_domain):
             if is_good_domain:
                 filtered_domains.append(dialogue)
     return filtered_domains
-
-
-def compute_prefixes(data):
-    prefixes = []
-
-    for dialogue in data:
-        domains = set()
-        for turn in dialogue['dialogue']:
-            turn_idx = turn['turn_idx']
-
-            if 'anything else' in turn['system_transcript']:
-               prefixes.append((dialogue, turn_idx, list(domains)))
-
-            domains.add(turn['domain'])
-
-    return prefixes
 
 
 def transfer_data(original_data, from_domain, to_domain):

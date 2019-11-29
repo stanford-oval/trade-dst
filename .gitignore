@@ -2,8 +2,13 @@
 save/
 sftp-config.json
 data/
+data-*
+model-*
 *.pyc
 run.sh
+*.gv
+*.pdf
+*.tsv
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
