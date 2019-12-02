@@ -38,23 +38,49 @@ TRANSFER_PHRASES = {
     'attraction': []
 }
 
-def load_data(except_domain):
+def load_data(except_domain, keep_pct=0):
     filename = 'data/train_dials.json'
 
     filtered_domains = []
+    in_domain_data = []
+
     with open(filename) as fp:
         data = json.load(fp)
 
         for dialogue in data:
             dialogue['dialogue'].sort(key=lambda x: int(x['turn_idx']))
 
+            all_domains = set(dialogue['domains'])
+            # add sometimes missing domains to annotation
+            for turn in dialogue['dialogue']:
+                turn_belief_dict = fix_general_label_error(turn["belief_state"], False, ALL_SLOTS)
+                for slot_key, slot_value in turn_belief_dict.items():
+                    if slot_value == 'none':
+                        continue
+                    domain, slot_name = slot_key.split('-', maxsplit=1)
+                    all_domains.add(domain)
+            dialogue['domains'] = list(all_domains)
+            dialogue['domains'].sort()
+
             is_good_domain = True
+            is_in_domain = False
             for domain in dialogue['domains']:
-                if domain not in EXPERIMENT_DOMAINS \
-                    or domain == except_domain:
+                if domain not in EXPERIMENT_DOMAINS:
                     is_good_domain = False
-            if is_good_domain:
+                if domain == except_domain:
+                    is_in_domain = True
+            if not is_good_domain:
+                continue
+
+            if is_in_domain:
+                in_domain_data.append(dialogue)
+            else:
                 filtered_domains.append(dialogue)
+
+    if keep_pct > 0:
+        random.shuffle(in_domain_data)
+        to_keep = int(keep_pct * len(in_domain_data))
+        return filtered_domains + in_domain_data[:to_keep]
     return filtered_domains
 
 
@@ -141,17 +167,31 @@ def transfer_data(original_data, from_domain, to_domain):
 
 def main():
     if len(sys.argv) < 4:
-        print(f"Usage: {sys.argv[0]} <synthetic.json> <from-domain> <to-domain>")
+        print(f"Usage: {sys.argv[0]} <synthetic.json> <from-domain> <to-domain> [<keep-pct>] [<do-transfer>]")
         sys.exit(1)
 
     synthetic_json = sys.argv[1]
     from_domain = sys.argv[2]
     to_domain = sys.argv[3]
+    if len(sys.argv) > 4:
+        keep_pct = float(sys.argv[4])
+        if keep_pct > 0 and keep_pct < 1:
+            print('Argument keep_pct should be between 0 and 100', file=sys.stderr)
+            sys.exit(1)
+        keep_pct /= 100
+    else:
+        keep_pct = 0
+    if len(sys.argv) > 5:
+        do_transfer = sys.argv[5] in ('yes', 'True', '1')
+    else:
+        do_transfer = True
 
-    original_data = load_data(to_domain)
+    original_data = load_data(to_domain, keep_pct)
+
     prefixes = compute_prefixes(original_data)
 
-    original_data = transfer_data(original_data, from_domain, to_domain)
+    if do_transfer:
+        original_data = transfer_data(original_data, from_domain, to_domain)
 
     continuations = compute_continuations(original_data)
 

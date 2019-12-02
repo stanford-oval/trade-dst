@@ -3,6 +3,9 @@ def remove_none_slots(belief):
         domain, slot_name, slot_value = slot_tuple.split('-')
         if slot_value == 'none':
             continue
+        if slot_value == "do n't care":
+            yield '-'.join((domain, slot_name, 'dontcare'))
+            continue
 
         # HACK HACK HACK
         # if domain != 'train':

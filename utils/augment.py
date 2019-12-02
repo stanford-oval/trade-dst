@@ -279,7 +279,7 @@ def add_continuation(continuations, synth_dialogue, strict_signature=False):
 
         return chosen_dialogue
     else:
-        if coin(0.1):
+        if coin(1):
             #print(compute_signature(target_belief, strict=strict_signature), file=sys.stderr)
             #return None
             return copy.deepcopy(synth_dialogue)
