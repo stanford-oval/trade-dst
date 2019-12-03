@@ -1,4 +1,3 @@
-
 replace_config() {
 sed \
   -e "s|@@JOB_NAME@@|${JOB_NAME}|g" \
@@ -67,7 +66,7 @@ parse_args() {
 }
 
 requote() {
-  for arg in '"$@"'; do
+  for arg ; do
     echo -n " \""$(sed 's/["\\]/\\\0/g' <<<"$arg")"\""
   done
 }

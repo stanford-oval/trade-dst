@@ -17,3 +17,4 @@ aws s3 sync s3://almond-research/${dataset_owner}/dataset/${experiment}/${datase
 python3 myTrain.py "$@"
 
 aws s3 sync save/ s3://almond-research/${owner}/models/${experiment}/${model}/
+aws s3 sync log/ s3://almond-research/${owner}/models/${experiment}/${model}/

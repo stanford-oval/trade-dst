@@ -142,14 +142,14 @@ def masking(losses, mask, gates_mask=None, domains_mask=None):
     batch_size = mask.size(0)
     max_len = losses.size(2)
     for si in range(mask.size(1)):
-        gate_masking = torch.ones((batch_size, max_len))
-        domain_masking = torch.ones((batch_size, max_len))
+        gate_masking = torch.ones((batch_size, max_len)).long()
+        domain_masking = torch.ones((batch_size, max_len)).long()
         if gates_mask is not None:
-            gate_masking = (1 - gates_mask[:, si]).unsqueeze(1).expand(batch_size, max_len)
+            gate_masking = (1 - gates_mask[:, si]).unsqueeze(1).expand(batch_size, max_len).long()
         if domains_mask is not None:
-            domain_masking = (1 - domains_mask[:, si]).unsqueeze(1).expand(batch_size, max_len)
+            domain_masking = (1 - domains_mask[:, si]).unsqueeze(1).expand(batch_size, max_len).long()
         seq_range = torch.arange(0, max_len).long()
-        seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, max_len)
+        seq_range_expand = seq_range.unsqueeze(0).expand(batch_size, max_len).long()
         if mask[:,si].is_cuda:
             seq_range_expand = seq_range_expand.cuda()
             gate_masking = gate_masking.cuda()

@@ -47,6 +47,7 @@ parser.add_argument('--gate_mask', help='gate loss weight', required=False, defa
 parser.add_argument('-domain', '--use_domain', help='', required=False, default=0, type=int)
 parser.add_argument('--domain_weight', help='domain loss weight', required=False, default=1, type=float)
 parser.add_argument('--domain_mask', help='domain loss weight', required=False, default=0, type=int)
+parser.add_argument('-tlw', '--trainable_loss_weights', help='gate and domain weights can be trainable', required=False, default=0, type=int)
 parser.add_argument('-le', '--load_embedding', help='', required=False, default=0, type=int)
 parser.add_argument('-femb', '--fix_embedding', help='', required=False, default=0, type=int)
 parser.add_argument('-paral', '--parallel_decode', help='', required=False, default=1, type=int)

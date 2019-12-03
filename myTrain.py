@@ -22,6 +22,16 @@ warnings.simplefilter("ignore", UserWarning)
 
 def run():
 
+    # create logger
+    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                    datefmt='%m/%d/%Y %H:%M:%S',
+                    level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    log_file = os.path.join(args['log_dir'], 'log.txt')
+    fh = logging.FileHandler(log_file, mode='w')
+    fh.setLevel(logging.DEBUG)
+    logger.addHandler(fh)
+
     seed = args['seed']
 
     if args['encoder'] == 'BERT' and args['bert_model'] is None:
@@ -46,16 +56,6 @@ def run():
         else:
             raise ValueError("Output directory ({}) already exists and is not empty.".format(args['log_dir']))
     os.makedirs(args['log_dir'], exist_ok=False)
-
-    # create logger
-    logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
-                    datefmt='%m/%d/%Y %H:%M:%S',
-                    level=logging.INFO)
-    logger = logging.getLogger(__name__)
-    log_file = os.path.join(args['log_dir'], 'log.txt')
-    fh = logging.FileHandler(log_file, mode='w')
-    fh.setLevel(logging.DEBUG)
-    logger.addHandler(fh)
 
     if args['local_rank'] == -1:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

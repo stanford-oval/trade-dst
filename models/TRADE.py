@@ -39,11 +39,12 @@ class TRADE(nn.Module):
         self.domain_dict = domain_dict
         self.device = device
         self.nb_gate = len(gating_dict)
-        self.gate_weight = args['gate_weight']
+        self.gate_weight = nn.Parameter(args['gate_weight'], requires_grad=args['trainable_loss_weights'])
         self.nb_domain = len(domain_dict)
-        self.domain_weight = args['domain_weight']
+        self.domain_weight = nn.Parameter(args['domain_weight'], requires_grad=args['trainable_loss_weights'])
         self.cross_entorpy = nn.CrossEntropyLoss()
         self.cell_type = args['cell_type']
+
 
         if args['encoder'] == 'RNN':
             self.encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type)
@@ -79,7 +80,7 @@ class TRADE(nn.Module):
                 {'params': [p for n, p in self.named_parameters() if not any(nd in n for nd in no_decay)], 'weight_decay': 0.01},
                 {'params': [p for n, p in self.named_parameters() if any(nd in n for nd in no_decay)], 'weight_decay': 0.0}
             ]
-            self.optimizer = AdamW(optimizer_grouped_parameters, lr=args['learn'], correct_bias=False)
+            self.optimizer = AdamW(optimizer_grouped_parameters, lr=lr, correct_bias=False)
             self.scheduler = WarmupLinearSchedule(self.optimizer, warmup_steps=args['warmup_proportion'] * t_total, t_total=t_total)
 
         self.reset()
@@ -290,6 +291,7 @@ class TRADE(nn.Module):
 
         evaluation_metrics = {"Joint Acc":joint_acc_score_ptr, "Turn Acc":turn_acc_score_ptr, "Joint F1":F1_score_ptr}
         logger.info(evaluation_metrics)
+        print(evaluation_metrics)
 
         # Set back to training mode
         self.encoder.train(True)
@@ -548,7 +550,6 @@ class Generator(nn.Module):
         self.sigmoid = nn.Sigmoid()
         self.slots = slots
         self.device = device
-
 
         self.W_gate = nn.Linear(hidden_size, self.nb_gate)
         self.W_domain = nn.Linear(hidden_size, self.nb_domain)
