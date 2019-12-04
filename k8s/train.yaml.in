@@ -35,11 +35,9 @@ spec:
           limits:
             cpu: 16
             memory: 58G
-            nvidia.com/gpu: 1
+            nvidia.com/gpu: @@GPU@@
           requests:
             cpu: 4
-      nodeSelector:
-        beta.kubernetes.io/instance-type: p3.2xlarge
       tolerations:
       - key: nvidia.com/gpu
         operator: Exists

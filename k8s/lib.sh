@@ -5,6 +5,7 @@ sed \
   -e "s|@@IAM_ROLE@@|${IAM_ROLE}|g" \
   -e "s|@@IMAGE@@|${IMAGE}|g" \
   -e "s|@@cmdline@@|${cmdline}|g" \
+  -e "s|@@GPU@@|${GPU}|g" \
   "$@"
 }
 

@@ -149,7 +149,6 @@ class TRADE(nn.Module):
 
         return self.loss_grad
 
-
     def optimize_GEM(self, clip):
         torch.nn.utils.clip_grad_norm_(self.parameters(), clip)
         self.optimizer.step()
