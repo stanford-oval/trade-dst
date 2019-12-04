@@ -39,15 +39,16 @@ class TRADE(nn.Module):
         self.domain_dict = domain_dict
         self.device = device
         self.nb_gate = len(gating_dict)
-        self.gate_weight = nn.Parameter(args['gate_weight'], requires_grad=args['trainable_loss_weights'])
+        self.gate_weight = nn.Parameter(torch.tensor(args['gate_weight'], device=device), requires_grad=bool(args['trainable_loss_weights']))
         self.nb_domain = len(domain_dict)
-        self.domain_weight = nn.Parameter(args['domain_weight'], requires_grad=args['trainable_loss_weights'])
+        self.domain_weight = nn.Parameter(torch.tensor(args['domain_weight'], device=device), requires_grad=bool(args['trainable_loss_weights']))
         self.cross_entorpy = nn.CrossEntropyLoss()
         self.cell_type = args['cell_type']
 
 
         if args['encoder'] == 'RNN':
             self.encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type)
+
             self.decoder = Generator(self.lang, self.encoder.embedding, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.nb_domain, self.device, self.cell_type)
         elif args['encoder'] == 'TPRNN':
             self.encoder = EncoderTPRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type,
@@ -58,12 +59,16 @@ class TRADE(nn.Module):
             self.encoder = BERTEncoder(hidden_size, self.dropout, self.device)
             self.decoder = Generator(self.lang, None, self.lang.n_words, hidden_size, self.dropout, self.slots, self.nb_gate, self.nb_domain, self.device, self.cell_type)
 
+        self.state_encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type)
+
         if path:
             logger.info("MODEL {} LOADED".format(str(path)))
             trained_encoder = torch.load(str(path)+'/enc.th', map_location=self.device)
+            trained_state_encoder = torch.load(str(path)+'/state_enc.th', map_location=self.device)
             trained_decoder = torch.load(str(path)+'/dec.th', map_location=self.device)
 
             self.encoder.load_state_dict(trained_encoder.state_dict())
+            self.state_encoder.load_state_dict(trained_state_encoder.state_dict())
             self.decoder.load_state_dict(trained_decoder.state_dict())
 
 
@@ -99,6 +104,7 @@ class TRADE(nn.Module):
         if not os.path.exists(directory):
             os.makedirs(directory)
         torch.save(self.encoder, directory + '/enc.th')
+        torch.save(self.state_encoder, directory + '/state_enc.th')
         torch.save(self.decoder, directory + '/dec.th')
     
     def reset(self):
@@ -169,7 +175,6 @@ class TRADE(nn.Module):
                 story = data['context']
 
             story = story.to(self.device)
-            # encoded_outputs, encoded_hidden = self.encoder(story.transpose(0, 1), data['context_len'])
             encoded_outputs, encoded_hidden = self.encoder(story, data['context_len'])
 
         # Encode dialog history
@@ -188,6 +193,17 @@ class TRADE(nn.Module):
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
 
+        prev_generate_y = data['prev_generate_y'].reshape(data['prev_generate_y'].shape[0], -1)
+        state_encoded_outputs, state_encoded_hidden = self.state_encoder(prev_generate_y, None)
+        if args['use_state_enc']:
+            final_outputs = torch.cat([encoded_outputs, state_encoded_outputs], dim=1)
+            final_hidden = encoded_hidden
+            new_story = torch.cat([story, prev_generate_y], dim=1)
+        else:
+            final_outputs = encoded_outputs
+            final_hidden = encoded_hidden
+            new_story = story
+
         # Get the words that can be copied from the memory
         # import pdb; pdb.set_trace()
         batch_size = len(data['context_len'])
@@ -195,7 +211,7 @@ class TRADE(nn.Module):
         max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
 
         all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out = self.decoder(batch_size, \
-            encoded_hidden, encoded_outputs, data['context_len'], story, max_res_len, data['generate_y'], \
+            final_hidden, final_outputs, data['context_len'], new_story, max_res_len, data['generate_y'], \
             use_teacher_forcing, slot_temp)
 
         return all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out

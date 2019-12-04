@@ -98,6 +98,9 @@ parser.add_argument("--delete_ok", type=str2bool, default=False, help='whether t
 
 parser.add_argument("--is_kube", type=str2bool, default=True, help="turn on specific requirements for kubernetes (e.g. having progress bar, ...)")
 
+parser.add_argument("--num_turns", type=int, default=-1, help='number of previous turns to encode at each turn')
+parser.add_argument("--use_state_enc", type=int, default=1, help='')
+
 # bert parameters
 parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")
 parser.add_argument("--do_lower_case", type=str2bool, default=False, help="Set this flag if you are using an uncased model.")

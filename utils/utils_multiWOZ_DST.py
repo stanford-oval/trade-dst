@@ -62,6 +62,7 @@ class Dataset(data.Dataset):
         self.domain_label = data_info['domain_label']
         self.turn_uttr = data_info['turn_uttr']
         self.generate_y = data_info["generate_y"]
+        self.prev_generate_y = data_info["prev_generate_y"]
         self.sequicity = sequicity
         self.num_total_seqs = len(self.dialog_history)
         self.src_word2id = src_word2id
@@ -79,6 +80,8 @@ class Dataset(data.Dataset):
         turn_domain = self.preprocess_domain(self.turn_domain[index])
         generate_y = self.generate_y[index]
         generate_y = self.preprocess_slot(generate_y, self.trg_word2id)
+        prev_generate_y_seqs = self.prev_generate_y[index]
+        prev_generate_y = self.preprocess_slot(prev_generate_y_seqs, self.trg_word2id)
         context_plain = self.dialog_history[index]
         context = self.preprocess(context_plain, self.src_word2id)
 
@@ -93,6 +96,7 @@ class Dataset(data.Dataset):
             "turn_uttr_plain":turn_uttr, 
             "turn_domain":turn_domain, 
             "generate_y":generate_y,
+            "prev_generate_y":prev_generate_y
             }
         return item_info
 
@@ -110,6 +114,14 @@ class Dataset(data.Dataset):
         story = []
         for value in sequence:
             v = [word2idx[word] if word in word2idx else UNK_token for word in value.split()] + [EOS_token]
+            story.append(v)
+        return story
+
+    def preprocess_simple(self, sequence, word2idx):
+        """Converts words to ids."""
+        story = []
+        for value in sequence:
+            v = [word2idx[word] if word in word2idx else UNK_token for word in value.split()]
             story.append(v)
         return story
 
@@ -156,9 +168,10 @@ def collate_fn(data, tokenizer=None):
 
         if plain:
             final_seqs = []
+            # padded_seqs = torch.ones(len(sequences), max_len).long()
             for i, seq in enumerate(new_sequences):
                 end = new_lengths[i]
-                final_seqs.append(seq[:end])
+                final_seqs.append(seq[:end] + ['PAD']*(max_len-end))
             return final_seqs, new_lengths
         else:
             padded_seqs = torch.ones(len(sequences), max_len).long()
@@ -211,6 +224,12 @@ def collate_fn(data, tokenizer=None):
     context_plain_seqs, context_plain_lengths = merge(context_plain_tokens, is_context=True, plain=True)
     context_plain_seqs = [" ".join(context_plain) for context_plain in context_plain_seqs]
     y_seqs, y_lengths = merge_multi_response(item_info["generate_y"])
+    prev_y_seqs, prev_y_lengths = merge_multi_response(item_info["prev_generate_y"])
+    # prev_generate_y_tokens = [[token + ' SEP' for token in y_seq] for y_seq in item_info["prev_generate_y"]]
+    # prev_generate_y = [" ".join(y_seq) for y_seq in prev_generate_y_tokens]
+    # prev_generate_y_tokens = [item.split(" ") for item in prev_generate_y]
+    # prev_y_seqs, prev_y_lengths = merge(prev_generate_y_tokens, is_context=True, plain=True)
+    # prev_y_seqs = [" ".join(y_seq) for y_seq in prev_y_seqs]
     gating_label = torch.tensor(item_info["gating_label"])
     domain_label = torch.tensor(item_info["domain_label"])
     turn_domain = torch.tensor(item_info["turn_domain"])
@@ -238,7 +257,9 @@ def collate_fn(data, tokenizer=None):
     item_info["domain_label"] = domain_label
     item_info["turn_domain"] = turn_domain
     item_info["generate_y"] = y_seqs
+    item_info["prev_generate_y"] = prev_y_seqs
     item_info["y_lengths"] = y_lengths
+    item_info["prev_y_lengths"] = prev_y_lengths
     item_info['all_input_ids'] = all_input_ids
     item_info['all_input_mask'] = all_input_mask
     item_info['all_segment_ids'] = all_segment_ids
@@ -253,20 +274,24 @@ def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_la
     domain_counter = {} 
     with open(file_name) as f:
         dials = json.load(f)
-        # create vocab first 
+
+        # determine training data ratio, default is 100%
+        if training and args["data_ratio"] != 100:
+            random.Random(10).shuffle(dials)
+            dials = dials[:max(int(len(dials)*0.01*args["data_ratio"]), 1)]
+
+        # create vocab first
         for dial_dict in dials:
             if (args["all_vocab"] or dataset=="train") and training:
                 for ti, turn in enumerate(dial_dict["dialogue"]):
                     lang.index_words(turn["system_transcript"], 'utter')
                     lang.index_words(turn["transcript"], 'utter')
-        # determine training data ratio, default is 100%
-        if training and args["data_ratio"] != 100:
-            random.Random(10).shuffle(dials)
-            dials = dials[:max(int(len(dials)*0.01*args["data_ratio"]), 1)]
         
         cnt_lin = 1
+        max_turns = args['num_turns'] if args['num_turns'] > 0 else float('inf')
         for dial_dict in dials:
             dialog_history = ""
+            num_turn_history = 0
             last_belief_dict = {}
             # Filtering and counting domains
             filter_domain = False
@@ -302,12 +327,21 @@ def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_la
                 continue
 
             # Reading data
+            generate_y = None
             for ti, turn in enumerate(dial_dict["dialogue"]):
+
                 turn_domain = turn["domain"]
                 turn_id = turn["turn_idx"]
                 turn_uttr = turn["system_transcript"] + " ; " + turn["transcript"]
                 turn_uttr_strip = turn_uttr.strip()
-                dialog_history +=  (turn["system_transcript"] + " ; " + turn["transcript"] + " ; ")
+
+                if ti > max_turns:
+                    # delete the first turn_uttr if exceeded max_turns
+                    index = dialog_history.find(';')
+                    dialog_history = dialog_history[index+1:]
+                    index = dialog_history.find(';')
+                    dialog_history = dialog_history[index+1:]
+                dialog_history += (turn["system_transcript"] + " ; " + turn["transcript"] + " ; ")
                 source_text = dialog_history.strip()
                 turn_belief_dict = fix_general_label_error(turn["belief_state"], False, SLOTS)
 
@@ -333,8 +367,14 @@ def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_la
                 if (args["all_vocab"] or dataset=="train") and training:
                     mem_lang.index_words(turn_belief_dict, 'belief')
 
+                if generate_y is not None:
+                    prev_generate_y = generate_y.copy()
+                else:
+                    prev_generate_y = ["none"]*len(slot_temp)
+
                 class_label, generate_y, slot_mask, gating_label, domain_label = [], [], [], [], []
                 start_ptr_label, end_ptr_label = [], []
+
                 for slot in slot_temp:
                     domain, slot_name = slot_key.split('-', maxsplit=1)
                     if domain == turn_domain:
@@ -370,7 +410,8 @@ def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_la
                     "gating_label":gating_label,
                     "domain_label":domain_label,
                     "turn_uttr":turn_uttr_strip, 
-                    'generate_y':generate_y
+                    'generate_y':generate_y,
+                    'prev_generate_y':prev_generate_y
                     }
                 data.append(data_detail)
                 
