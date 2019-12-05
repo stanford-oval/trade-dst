@@ -120,7 +120,7 @@ class TRADE(nn.Module):
         # Encode and Decode
         use_teacher_forcing = random.random() < args["teacher_forcing_ratio"]
         all_point_outputs, gates, domains, words_point_out, words_class_out =\
-            self.encode_and_decode(data, use_teacher_forcing, slot_temp, epoch)
+            self.encode_and_decode(data, use_teacher_forcing, slot_temp, epoch, True)
 
         # ignore_gate_idx = [v for k, v in self.gating_dict.items() if k in ['dontcare', 'none']]
         # ignore_domain_idx = [v for k, v in self.domain_dict.items() if k in ['absent']]
@@ -164,7 +164,7 @@ class TRADE(nn.Module):
         if isinstance(self.scheduler, WarmupLinearSchedule):
             self.scheduler.step()
 
-    def encode_and_decode(self, data, use_teacher_forcing, slot_temp, epoch):
+    def encode_and_decode(self, data, use_teacher_forcing, slot_temp, epoch, training):
         if args['encoder'] == 'RNN' or args['encoder'] == 'TPRNN':
             # Build unknown mask for memory to encourage generalization
             if args['unk_mask'] and self.decoder.training:
@@ -196,10 +196,10 @@ class TRADE(nn.Module):
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
         batch_size = data['prev_generate_y'].shape[0]
-        if epoch < args['epoch_threshold'] and self.training:
+        if epoch < args['epoch_threshold'] and training:
             prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
         else:
-            gold_turn_ratio = random.random() < args["gold_turn_ratio"] if self.training else 0
+            gold_turn_ratio = random.random() < args["gold_turn_ratio"] if training else 0
             if gold_turn_ratio:
                 prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
             else:
@@ -238,7 +238,6 @@ class TRADE(nn.Module):
         all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out = self.decoder(batch_size, \
             final_hidden, final_outputs, data['context_len'], new_story, max_res_len, data['generate_y'], \
             use_teacher_forcing, slot_temp)
-
 
         return all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out
 
@@ -320,7 +319,7 @@ class TRADE(nn.Module):
     def evaluate(self, dev, matric_best, slot_temp, device, save_dir="", save_string = "", early_stop=None):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
-        self.decoder.train(False)  
+        self.decoder.train(False)
         logger.info("STARTING EVALUATION")
         all_prediction = {}
 
@@ -345,7 +344,7 @@ class TRADE(nn.Module):
                     pass
             batch_size = len(data_dev['context_len'])
             with torch.no_grad():
-                _, gates, domains, words, class_words = self.encode_and_decode(eval_data, False, slot_temp, epoch=0)
+                _, gates, domains, words, class_words = self.encode_and_decode(eval_data, False, slot_temp, epoch=0, training=False)
 
             for bi in range(batch_size):
                 if data_dev["ID"][bi] not in all_prediction.keys():
