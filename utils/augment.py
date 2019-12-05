@@ -71,7 +71,7 @@ class ReplaceBag:
 
 
 def parse_belief(belief_str):
-    if belief_str == 'none':
+    if belief_str in ('null', 'greet'):
         return dict(), []
 
     tokens = belief_str.split()
@@ -80,6 +80,13 @@ def parse_belief(belief_str):
     domains = set()
 
     i = 0
+    # discard intent
+    i += 1
+
+    first_domain = tokens[i]
+    domains.add(first_domain)
+    i += 1
+
     while i < len(tokens):
         domain = tokens[i]
         domains.add(domain)
@@ -400,7 +407,7 @@ def process_synthetic_json(prefixes, continuations, from_file, only_domain=None)
         if only_domain is not None and only_domain not in synth_dialogue['domains']:
             continue
 
-        if not coin(0.2):
+        if not coin(0.3):
             continue
 
         new_dialogue = add_continuation(continuations, synth_dialogue)
