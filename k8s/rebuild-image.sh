@@ -3,7 +3,7 @@
 srcdir=`dirname $0`
 . "${srcdir}/config"
 . "${srcdir}/lib.sh"
-check_config "IMAGE COMMON_IMAGE"
+check_config "IMAGE COMMON_IMAGE genie_version"
 
 set -e
 set -x
@@ -13,5 +13,8 @@ set -x
 #docker push ${COMMON_IMAGE}
 docker pull ${COMMON_IMAGE}
 
-docker build -t ${IMAGE} -f ${srcdir}/Dockerfile --build-arg COMMON_IMAGE=${COMMON_IMAGE} ${srcdir}/..
+docker build -t ${IMAGE} -f ${srcdir}/Dockerfile \
+  --build-arg COMMON_IMAGE=${COMMON_IMAGE} \
+  --build-arg GENIE_VERSION=${genie_version} \
+  ${srcdir}/..
 docker push ${IMAGE}
