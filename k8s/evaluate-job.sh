@@ -24,7 +24,7 @@ for pred_file in prediction_*; do
   aws s3 cp ${pred_file} s3://almond-research/${owner}/models/${experiment}/${model}/predictions/full/
 done
 
-for d in hotel train restaurant attraction taxi ; do
+for d in attraction hotel restaurant taxi train ; do
   echo "Only" $d >> results
   python3 myTest.py -gs=1 -path "$best_model" -onlyd "$d" "$@" | tee -a results
   for pred_file in prediction_*; do

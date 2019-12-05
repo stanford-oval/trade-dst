@@ -143,7 +143,7 @@ class Dataset(data.Dataset):
         return domains[turn_domain]
 
 
-def collate_fn(data, tokenizer=None):
+def collate_fn(data, sequicity, tokenizer=None):
     def merge(sequences, is_context=False, plain=False):
         '''
         merge from batch * sent_len to batch * max_len 
@@ -213,7 +213,8 @@ def collate_fn(data, tokenizer=None):
         return padded_seqs, lengths
   
     # sort a list by sequence length (descending order) to use pack_padded_sequence
-    data.sort(key=lambda x: len(x['context']), reverse=True) 
+    if not sequicity:
+        data.sort(key=lambda x: len(x['context']), reverse=True)
     item_info = {}
     for key in data[0].keys():
         item_info[key] = [d[key] for d in data]
@@ -277,7 +278,8 @@ def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_la
 
         # determine training data ratio, default is 100%
         if training and args["data_ratio"] != 100:
-            random.Random(10).shuffle(dials)
+            if not sequicity:
+                random.Random(10).shuffle(dials)
             dials = dials[:max(int(len(dials)*0.01*args["data_ratio"]), 1)]
 
         # create vocab first
@@ -433,7 +435,8 @@ def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_la
 
 def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity, tokenizer=None):
     if(type and args['fisher_sample']>0):
-        shuffle(pairs)
+        if not sequicity:
+            shuffle(pairs)
         pairs = pairs[:args['fisher_sample']]
 
     data_info = {}
@@ -451,13 +454,20 @@ def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity, tokenizer=None):
         data_loader = torch.utils.data.DataLoader(dataset=dataset,
                                                   batch_size=batch_size,
                                                   # shuffle=type,
-                                                  collate_fn=lambda data: collate_fn(data, tokenizer),
+                                                  collate_fn=lambda data: collate_fn(data, False, tokenizer),
                                                   sampler=ImbalancedDatasetSampler(dataset))
+    elif args["no_shuffle_sampler"] and type:
+        data_loader = torch.utils.data.DataLoader(dataset=dataset,
+                                                  # batch_size=batch_size,
+                                                  # shuffle=False,
+                                                  collate_fn=lambda data: collate_fn(data, True, tokenizer),
+                                                  batch_sampler=DialogueSampler(dataset))
     else:
         data_loader = torch.utils.data.DataLoader(dataset=dataset,
                                                   batch_size=batch_size,
                                                   shuffle=type,
-                                                  collate_fn=lambda data: collate_fn(data, tokenizer))
+                                                  collate_fn=lambda data: collate_fn(data, False, tokenizer))
+
     return data_loader
 
 
@@ -617,3 +627,43 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
 
     def __len__(self):
         return self.num_samples
+
+class DialogueSampler(torch.utils.data.sampler.Sampler):
+    """Samples elements so that each batch contains all turns from one dialogue
+        indices (list, optional): a list of indices
+        num_samples (int, optional): number of samples to draw
+    """
+
+    def __init__(self, dataset):
+
+        self.dataset = dataset
+        self.offset = 0
+        self.begin = 0
+
+    def __iter__(self):
+        # all_samples = []
+        # begin = 0
+        # end = 0
+        # while begin <= len(self.dataset):
+        #     dial = self.dataset[begin]['ID']
+        #     while self.dataset[self.offset]['ID'] == dial:
+        #         end += 1
+        #     all_samples.append(list(range(begin, end)))
+        #     begin = end
+        #
+        # return iter(all_samples)
+        if self.offset >= len(self.dataset):
+            self.reset()
+        begin = self.offset
+        dial = self.dataset[self.offset]['ID']
+        while self.offset < len(self.dataset) and self.dataset[self.offset]['ID'] == dial:
+            self.offset += 1
+        self.begin = begin
+        yield list(range(begin, self.offset))
+
+    def __len__(self):
+        return self.offset - self.begin
+
+    def reset(self):
+        self.offset = 0
+        self.begin = 0

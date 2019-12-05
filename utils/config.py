@@ -28,6 +28,7 @@ parser.add_argument('-patience', '--patience', help='', required=False, default=
 parser.add_argument('-es', '--earlyStop', help='Early Stop Criteria, BLEU or ENTF1', required=False, default='BLEU')
 parser.add_argument('-all_vocab', '--all_vocab', help='', required=False, default=1, type=int)
 parser.add_argument('-imbsamp', '--imbalance_sampler', help='', required=False, default=0, type=int)
+parser.add_argument('-noshuff', '--no_shuffle_sampler', help='', required=False, default=0, type=int)
 parser.add_argument('-data_ratio', '--data_ratio', help='', required=False, default=100, type=float)
 parser.add_argument('-um', '--unk_mask', help='mask out input token to UNK', type=int, required=False, default=1)
 parser.add_argument('-bsz', '--batch', help='Batch_size', required=False, type=int)
@@ -99,7 +100,9 @@ parser.add_argument("--delete_ok", type=str2bool, default=False, help='whether t
 parser.add_argument("--is_kube", type=str2bool, default=True, help="turn on specific requirements for kubernetes (e.g. having progress bar, ...)")
 
 parser.add_argument("--num_turns", type=int, default=-1, help='number of previous turns to encode at each turn')
-parser.add_argument("--use_state_enc", type=int, default=1, help='')
+parser.add_argument("--use_state_enc", type=int, default=0, help='')
+parser.add_argument("--epoch_threshold", type=int, default=0, help='')
+parser.add_argument('-gtr', '--gold_turn_ratio', help='gold_turn_ratio', type=float, required=False, default=0.5)
 
 # bert parameters
 parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")

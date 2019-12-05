@@ -22,6 +22,13 @@ warnings.simplefilter("ignore", UserWarning)
 
 def run():
 
+    if os.path.exists(args['log_dir']):
+        if args['delete_ok']:
+            shutil.rmtree(args['log_dir'])
+        else:
+            raise ValueError("Output directory ({}) already exists and is not empty.".format(args['log_dir']))
+    os.makedirs(args['log_dir'], exist_ok=False)
+
     # create logger
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
                     datefmt='%m/%d/%Y %H:%M:%S',
@@ -49,13 +56,6 @@ def run():
     # Configure models and load data
     avg_best, cnt, acc = 0.0, 0, 0.0
     train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = prepare_data_seq(True, args['task'], False, batch_size=int(args['batch']))
-
-    if os.path.exists(args['log_dir']):
-        if args['delete_ok']:
-            shutil.rmtree(args['log_dir'])
-        else:
-            raise ValueError("Output directory ({}) already exists and is not empty.".format(args['log_dir']))
-    os.makedirs(args['log_dir'], exist_ok=False)
 
     if args['local_rank'] == -1:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -132,7 +132,7 @@ def run():
                     # print('v is: {} and this ignoring {}'.format(v, k))
                     pass
 
-            loss = model(batch, int(args['clip']), SLOTS_LIST[1], reset=(i==0), n_gpu=n_gpu)
+            loss = model(batch, int(args['clip']), SLOTS_LIST[1], reset=(i==0), n_gpu=n_gpu, epoch=epoch)
 
             if n_gpu > 1:
                 loss = loss.mean()  # mean() to average on multi-gpu.

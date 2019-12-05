@@ -10,7 +10,7 @@ import numpy as np
 import logging
 
 from utils.masked_cross_entropy import masked_cross_entropy_for_value
-from utils.config import args, PAD_token
+from utils.config import args, PAD_token, SOS_token, EOS_token, UNK_token
 from models.modules import TPRencoder_LSTM
 from tqdm import tqdm
 
@@ -44,6 +44,8 @@ class TRADE(nn.Module):
         self.domain_weight = nn.Parameter(torch.tensor(args['domain_weight'], device=device), requires_grad=bool(args['trainable_loss_weights']))
         self.cross_entorpy = nn.CrossEntropyLoss()
         self.cell_type = args['cell_type']
+
+        self.inverse_unpoint_slot = dict([(v, k) for k, v in self.gating_dict.items()])
 
 
         if args['encoder'] == 'RNN':
@@ -110,17 +112,18 @@ class TRADE(nn.Module):
     def reset(self):
         self.loss, self.print_every, self.loss_ptr, self.loss_gate, self.loss_domain, self.loss_class = 0, 1, 0, 0, 0, 0
 
-    def forward(self, data, clip, slot_temp, reset=0, n_gpu=0):
+    def forward(self, data, clip, slot_temp, reset=0, n_gpu=0, epoch=0):
         if reset: self.reset()
         # Zero gradients of both optimizers
         self.optimizer.zero_grad()
         
         # Encode and Decode
         use_teacher_forcing = random.random() < args["teacher_forcing_ratio"]
-        all_point_outputs, gates, domains, words_point_out, words_class_out = self.encode_and_decode(data, use_teacher_forcing, slot_temp)
+        all_point_outputs, gates, domains, words_point_out, words_class_out =\
+            self.encode_and_decode(data, use_teacher_forcing, slot_temp, epoch)
 
-        ignore_gate_idx = [v for k, v in self.gating_dict.items() if k in ['dontcare', 'none']]
-        ignore_domain_idx = [v for k, v in self.domain_dict.items() if k in ['absent']]
+        # ignore_gate_idx = [v for k, v in self.gating_dict.items() if k in ['dontcare', 'none']]
+        # ignore_domain_idx = [v for k, v in self.domain_dict.items() if k in ['absent']]
 
         gates_mask = None
         domains_mask = None
@@ -161,7 +164,7 @@ class TRADE(nn.Module):
         if isinstance(self.scheduler, WarmupLinearSchedule):
             self.scheduler.step()
 
-    def encode_and_decode(self, data, use_teacher_forcing, slot_temp):
+    def encode_and_decode(self, data, use_teacher_forcing, slot_temp, epoch):
         if args['encoder'] == 'RNN' or args['encoder'] == 'TPRNN':
             # Build unknown mask for memory to encourage generalization
             if args['unk_mask'] and self.decoder.training:
@@ -192,8 +195,31 @@ class TRADE(nn.Module):
 
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
+        batch_size = data['prev_generate_y'].shape[0]
+        if epoch < args['epoch_threshold']:
+            prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
+        else:
+            # gold_turn_ratio = random.random() < args["gold_turn_ratio"]
+            gold_turn_ratio = 0
+            if gold_turn_ratio:
+                prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
+            else:
+                prev_generate_y = []
 
-        prev_generate_y = data['prev_generate_y'].reshape(data['prev_generate_y'].shape[0], -1)
+                for b in range(batch_size):
+                    cur_encoded_outputs = encoded_outputs[[b], ...]
+                    cur_encoded_hidden = encoded_hidden[:, [b], ...]
+                    max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
+                    cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out =\
+                                     self.decoder(1,  cur_encoded_hidden, cur_encoded_outputs, data['context_len'][[b]],
+                                     story[[b], ...],
+                                     max_res_len, data['generate_y'][[b], ...],  use_teacher_forcing, slot_temp)
+                    predicted_slots = self.generate_slots(cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out, slot_temp)
+                    prev_generate_y.append(predicted_slots)
+
+                prev_y, prev_y_lengths = self.merge_multi_response(prev_generate_y)
+                prev_generate_y = prev_y.reshape(batch_size, -1)
+
         state_encoded_outputs, state_encoded_hidden = self.state_encoder(prev_generate_y, None)
         if args['use_state_enc']:
             final_outputs = torch.cat([encoded_outputs, state_encoded_outputs], dim=1)
@@ -214,7 +240,83 @@ class TRADE(nn.Module):
             final_hidden, final_outputs, data['context_len'], new_story, max_res_len, data['generate_y'], \
             use_teacher_forcing, slot_temp)
 
+
         return all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out
+
+    def merge_multi_response(self, sequences):
+        '''
+        merge from batch * nb_slot * slot_len to batch * nb_slot * max_slot_len
+        '''
+        lengths = []
+        for bsz_seq in sequences:
+            length = [len(v) for v in bsz_seq]
+            lengths.append(length)
+        max_len = max([max(l) for l in lengths])
+        padded_seqs = []
+        for bsz_seq in sequences:
+            pad_seq = []
+            for v in bsz_seq:
+                v = v + [PAD_token] * (max_len-len(v))
+                pad_seq.append(v)
+            padded_seqs.append(pad_seq)
+        padded_seqs = torch.tensor(padded_seqs)
+        lengths = torch.tensor(lengths)
+        return padded_seqs, lengths
+
+    def generate_slots(self, cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out, slot_temp):
+
+        predict_belief_bsz_ptr = []
+        gate = torch.argmax(cur_gate_outputs.transpose(0, 1)[0], dim=1)
+        domain = torch.argmax(cur_domains_output.transpose(0, 1)[0], dim=1)
+        # import pdb; pdb.set_trace()
+
+        # pointer-generator results
+        use_gate = args["use_gate"]
+        use_domain = args["use_domain"]
+        if use_gate or use_domain:
+            for si, (sg, sd) in enumerate(zip(gate, domain)):
+                if (sg==self.gating_dict["none"] and use_gate) or (sd==self.domain_dict["absent"] and use_domain):
+                    continue
+                elif (sg==self.gating_dict["ptr"] and use_gate) and ((not use_domain) or (sd==self.domain_dict["present"] and use_domain)):
+                    pred = np.transpose(cur_words_point_out[si])[0]
+                    st = []
+                    for e in pred:
+                        if e== 'EOS': break
+                        else: st.append(e)
+                    st = " ".join(st)
+                    if st == "none":
+                        continue
+                    else:
+                        predict_belief_bsz_ptr.append(slot_temp[si]+"-"+str(st))
+                elif (not use_domain) or (sd==self.domain_dict["present"] and use_domain):
+                    predict_belief_bsz_ptr.append(slot_temp[si]+"-"+self.inverse_unpoint_slot[sg.item()])
+                else:
+                    continue
+        else:
+            for si, _ in enumerate(gate):
+                pred = np.transpose(cur_words_point_out[si])[0]
+                st = []
+                for e in pred:
+                    if e == 'EOS': break
+                    else: st.append(e)
+                st = " ".join(st)
+                if st == "none":
+                    continue
+                else:
+                    predict_belief_bsz_ptr.append(slot_temp[si]+"-"+str(st))
+
+        predict_belief_bsz_ptr_final = ["none"]*len(slot_temp)
+        for v in predict_belief_bsz_ptr:
+            slot, value = v.rsplit('-', 1)
+            index = slot_temp.index(slot)
+            predict_belief_bsz_ptr_final[index] = value
+
+        final_val = []
+        for value in predict_belief_bsz_ptr_final:
+            v = [self.lang.word2index[word] if word in self.lang.word2index else UNK_token for word in value.split()] + [EOS_token]
+            final_val.append(v)
+
+        return final_val
 
     def evaluate(self, dev, matric_best, slot_temp, device, save_dir="", save_string = "", early_stop=None):
         # Set to not-training mode to disable dropout
@@ -223,6 +325,7 @@ class TRADE(nn.Module):
         logger.info("STARTING EVALUATION")
         all_prediction = {}
         inverse_unpoint_slot = dict([(v, k) for k, v in self.gating_dict.items()])
+
         if args['is_kube']:
             pbar = enumerate(dev)
         else:
@@ -244,12 +347,12 @@ class TRADE(nn.Module):
                     pass
             batch_size = len(data_dev['context_len'])
             with torch.no_grad():
-                _, gates, domains, words, class_words = self.encode_and_decode(eval_data, False, slot_temp)
+                _, gates, domains, words, class_words = self.encode_and_decode(eval_data, False, slot_temp, epoch=0)
 
             for bi in range(batch_size):
                 if data_dev["ID"][bi] not in all_prediction.keys():
                     all_prediction[data_dev["ID"][bi]] = {}
-                all_prediction[data_dev["ID"][bi]][data_dev["turn_id"][bi]] = {"turn_belief":data_dev["turn_belief"][bi]}
+                all_prediction[data_dev["ID"][bi]][data_dev["turn_id"][bi]] = {"turn_belief": data_dev["turn_belief"][bi]}
                 predict_belief_bsz_ptr, predict_belief_bsz_class = [], []
                 gate = torch.argmax(gates.transpose(0, 1)[bi], dim=1)
                 domain = torch.argmax(domains.transpose(0, 1)[bi], dim=1)
@@ -274,7 +377,7 @@ class TRADE(nn.Module):
                             else:
                                 predict_belief_bsz_ptr.append(slot_temp[si]+"-"+str(st))
                         elif (not use_domain) or (sd==self.domain_dict["present"] and use_domain):
-                            predict_belief_bsz_ptr.append(slot_temp[si]+"-"+inverse_unpoint_slot[sg.item()])
+                            predict_belief_bsz_ptr.append(slot_temp[si]+"-"+self.inverse_unpoint_slot[sg.item()])
                         else:
                             continue
                 else:
