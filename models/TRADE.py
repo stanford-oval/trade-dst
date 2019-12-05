@@ -196,10 +196,10 @@ class TRADE(nn.Module):
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
         batch_size = data['prev_generate_y'].shape[0]
-        if epoch < args['epoch_threshold']:
+        if epoch < args['epoch_threshold'] and self.training:
             prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
         else:
-            gold_turn_ratio = random.random() < args["gold_turn_ratio"]
+            gold_turn_ratio = random.random() < args["gold_turn_ratio"] if self.training else 0
             if gold_turn_ratio:
                 prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
             else:
@@ -323,7 +323,6 @@ class TRADE(nn.Module):
         self.decoder.train(False)  
         logger.info("STARTING EVALUATION")
         all_prediction = {}
-        inverse_unpoint_slot = dict([(v, k) for k, v in self.gating_dict.items()])
 
         if args['is_kube']:
             pbar = enumerate(dev)
