@@ -456,7 +456,7 @@ def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity, tokenizer=None):
                                                   # shuffle=type,
                                                   collate_fn=lambda data: collate_fn(data, False, tokenizer),
                                                   sampler=ImbalancedDatasetSampler(dataset))
-    elif args["no_shuffle_sampler"] and type:
+    elif args["no_shuffle_sampler"]:
         data_loader = torch.utils.data.DataLoader(dataset=dataset,
                                                   # batch_size=batch_size,
                                                   # shuffle=False,
@@ -498,6 +498,7 @@ def get_slot_information(ontology):
 
 
 def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
+    sequicity = args['use_state_enc']
     if args['encoder'] == 'BERT':
         tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
     else:
@@ -628,42 +629,26 @@ class ImbalancedDatasetSampler(torch.utils.data.sampler.Sampler):
     def __len__(self):
         return self.num_samples
 
+
 class DialogueSampler(torch.utils.data.sampler.Sampler):
     """Samples elements so that each batch contains all turns from one dialogue
         indices (list, optional): a list of indices
         num_samples (int, optional): number of samples to draw
     """
-
     def __init__(self, dataset):
-
-        self.dataset = dataset
-        self.offset = 0
-        self.begin = 0
-
+        self.dataset = list(dataset)
+        self.dataset.sort(key=lambda turn: (turn['ID'] , turn['turn_id']))
+        self.dialog_indices = []
+        i = 0
+        while i < len(self.dataset):
+           begin = i
+           id = self.dataset[i]['ID']
+           while i < len(self.dataset) and self.dataset[i]['ID'] == id:
+                i += 1
+           self.dialog_indices.append((begin, i))
     def __iter__(self):
-        # all_samples = []
-        # begin = 0
-        # end = 0
-        # while begin <= len(self.dataset):
-        #     dial = self.dataset[begin]['ID']
-        #     while self.dataset[self.offset]['ID'] == dial:
-        #         end += 1
-        #     all_samples.append(list(range(begin, end)))
-        #     begin = end
-        #
-        # return iter(all_samples)
-        if self.offset >= len(self.dataset):
-            self.reset()
-        begin = self.offset
-        dial = self.dataset[self.offset]['ID']
-        while self.offset < len(self.dataset) and self.dataset[self.offset]['ID'] == dial:
-            self.offset += 1
-        self.begin = begin
-        yield list(range(begin, self.offset))
-
+        random.shuffle(self.dialog_indices)
+        for begin, end in self.dialog_indices:
+             yield list(range(begin, end))
     def __len__(self):
-        return self.offset - self.begin
-
-    def reset(self):
-        self.offset = 0
-        self.begin = 0
+        return len(self.dialog_indices) # FIXME

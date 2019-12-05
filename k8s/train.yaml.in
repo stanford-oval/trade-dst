@@ -38,6 +38,8 @@ spec:
             nvidia.com/gpu: @@GPU@@
           requests:
             cpu: 4
+      nodeSelector:
+        beta.kubernetes.io/instance-type: @@GPU_TYPE@@
       tolerations:
       - key: nvidia.com/gpu
         operator: Exists

@@ -6,7 +6,12 @@ srcdir=`dirname $0`
 
 parse_args "$0" "experiment dataset model" "$@"
 shift $n
-check_config "IAM_ROLE OWNER DATASET_OWNER IMAGE GPU"
+if [ "$GPU" = "1" ]; then
+	GPU_TYPE="p3.2xlarge"
+else
+	GPU_TYPE="p3.8xlarge"
+fi
+check_config "IAM_ROLE OWNER DATASET_OWNER IMAGE GPU GPU_TYPE"
 
 JOB_NAME=${OWNER}-train-${experiment}-${model}
 cmdline="--owner ${OWNER} --dataset_owner ${DATASET_OWNER} --experiment $experiment --dataset $dataset --model $model -- "$(requote "$@")

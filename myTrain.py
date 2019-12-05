@@ -36,7 +36,7 @@ def run():
     logger = logging.getLogger(__name__)
     log_file = os.path.join(args['log_dir'], 'log.txt')
     fh = logging.FileHandler(log_file, mode='w')
-    fh.setLevel(logging.DEBUG)
+    fh.setLevel(logging.INFO)
     logger.addHandler(fh)
 
     seed = args['seed']
@@ -92,6 +92,7 @@ def run():
         t_total=num_train_steps,
         nb_train_vocab=max_word,
         device=device,
+        logger=logger
         )
     else:
         raise ValueError("Model {} specified does not exist".format(args['decoder']))

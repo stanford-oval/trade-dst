@@ -6,6 +6,7 @@ sed \
   -e "s|@@IMAGE@@|${IMAGE}|g" \
   -e "s|@@cmdline@@|${cmdline}|g" \
   -e "s|@@GPU@@|${GPU}|g" \
+  -e "s|@@GPU_TYPE@@|${GPU_TYPE}|g" \
   "$@"
 }
 
