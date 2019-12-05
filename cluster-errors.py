@@ -50,6 +50,10 @@ def substring_seq(string, substring):
     return -1
 
 
+def get_turn_domain(example):
+    return example.dialogue['dialogue'][example.turn_idx]['domain']
+
+
 ALL_FEATURES = collections.OrderedDict()
 
 def feature(fn):
@@ -62,6 +66,17 @@ def per_domain_feature(fn):
         if domain == 'none':
             continue
         ALL_FEATURES[fn.__name__ + ':' + domain] = partial(fn, domain)
+    return fn
+
+
+def per_domain_pair_feature(fn):
+    for d1 in EXPERIMENT_DOMAINS:
+        if d1 == 'none':
+            continue
+        for d2 in EXPERIMENT_DOMAINS:
+            if d2 == 'none' or d2 == d1:
+                continue
+            ALL_FEATURES[fn.__name__ + ':' + d1 + '+' + d2] = partial(fn, d1, d2)
     return fn
 
 
@@ -94,9 +109,19 @@ def slot_is_wrong(slot_name, example):
     return get_value(slot_name, example.annotation) != get_value(slot_name, example.prediction)
 
 
-@per_domain_feature
+#@per_domain_feature
 def has_domain(domain, example):
     return domain in example.dialogue['domains']
+
+
+@per_domain_pair_feature
+def has_domain_switch(domain1, domain2, example):
+    turn_domain = get_turn_domain(example)
+    return turn_domain == domain2 and example.previous != None and \
+        get_turn_domain(example.previous) == domain1
+# @feature
+# def has_domain_switch(example):
+#     return example.previous != None and get_turn_domain(example) != get_turn_domain(example.previous)
 
 
 @per_slot_feature
@@ -145,7 +170,7 @@ def annotation_type_error(slot_key, example):
     return slot_value in ('yes', 'no')
 
 
-@range_feature(10)
+#@range_feature(10)
 def number_of_slots_in_annotation(num, example, exact=True):
     if exact:
         return len(example.annotation) == num
@@ -153,7 +178,7 @@ def number_of_slots_in_annotation(num, example, exact=True):
         return len(example.annotation) >= num
 
 
-@range_feature(5)
+#@range_feature(5)
 def turn_number(num, example, exact=True):
     if exact:
         return example.turn_idx == num
@@ -182,7 +207,7 @@ def prediction_is_subset(example):
     return True
 
 
-@feature
+#@feature
 def previous_turn_correct(example):
     if example.previous is None:
         return True
@@ -393,6 +418,8 @@ def do_greedy(dialogue_dev_data, pred_data, examples):
         feature_error_percent = feature_error_count / (1e-5 + feature_counts)
 
         worst_feature_idx = np.argmax(feature_error_percent)
+        #worst_feature_idx = np.argmax(feature_error_count)
+
         worst_feature = all_features[worst_feature_idx]
 
         print('Cluster %d: %s = %.0f / %.0f / %.0f = %.2f' % (
