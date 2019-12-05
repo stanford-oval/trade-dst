@@ -199,8 +199,7 @@ class TRADE(nn.Module):
         if epoch < args['epoch_threshold']:
             prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
         else:
-            # gold_turn_ratio = random.random() < args["gold_turn_ratio"]
-            gold_turn_ratio = 0
+            gold_turn_ratio = random.random() < args["gold_turn_ratio"]
             if gold_turn_ratio:
                 prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
             else:

@@ -101,7 +101,7 @@ parser.add_argument("--is_kube", type=str2bool, default=True, help="turn on spec
 
 parser.add_argument("--num_turns", type=int, default=-1, help='number of previous turns to encode at each turn')
 parser.add_argument("--use_state_enc", type=int, default=0, help='')
-parser.add_argument("--epoch_threshold", type=int, default=0, help='')
+parser.add_argument("--epoch_threshold", type=int, default=100000, help='')
 parser.add_argument('-gtr', '--gold_turn_ratio', help='gold_turn_ratio', type=float, required=False, default=0.5)
 
 # bert parameters
