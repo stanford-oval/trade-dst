@@ -103,7 +103,16 @@ def parse_belief(belief_str):
         slot_key = domain + '-' + slot_name
 
         assert tokens[i] == 'is'
+        is_maybe = False
         i += 1
+
+        if tokens[i] == 'maybe':
+            is_maybe = True
+            i += 1
+
+        if tokens[i] == '?': # ignore questions from the user
+            i += 1
+            continue
 
         if tokens[i] in ('yes', 'no', 'dontcare'):
             belief[slot_key] = tokens[i]
@@ -116,7 +125,10 @@ def parse_belief(belief_str):
                 i += 1
             slot_value_end = i
             i += 1
+            if is_maybe: # ignore maybe values
+                continue
             belief[slot_key] = ' '.join(tokens[slot_value_begin : slot_value_end])
+            assert belief[slot_key] != '?'
     return belief, domains
 
 
