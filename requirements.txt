@@ -21,3 +21,4 @@ torch>=1.0.0
 tqdm==4.32.1
 urllib3==1.25.3
 transformers==2.0.0
+tensorboardX==1.9

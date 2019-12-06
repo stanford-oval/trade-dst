@@ -34,7 +34,7 @@ parser.add_argument('-um', '--unk_mask', help='mask out input token to UNK', typ
 parser.add_argument('-bsz', '--batch', help='Batch_size', required=False, type=int)
 
 # Testing Setting
-parser.add_argument('-rundev', '--run_dev_testing', help='', required=False, default=0, type=int)
+parser.add_argument('-rundev', '--run_dev_testing', help='', required=False, default=1, type=int)
 parser.add_argument('-viz', '--vizualization', help='vizualization', type=int, required=False, default=0)
 parser.add_argument('-gs', '--genSample', help='Generate Sample', type=int, required=False, default=0)
 parser.add_argument('-evalp', '--evalp', help='evaluation period', required=False, default=1)

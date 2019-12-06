@@ -93,10 +93,10 @@ class TRADE(nn.Module):
         print_loss_avg = self.loss / self.print_every
         print_loss_ptr = self.loss_ptr / self.print_every
         print_loss_gate = self.loss_gate / self.print_every
-        print_loss_class = self.loss_class / self.print_every
-        # print_loss_domain = self.loss_domain / self.print_every
+        # print_loss_class = self.loss_class / self.print_every
+        print_loss_domain = self.loss_domain / self.print_every
         self.print_every += 1     
-        return 'L:{:.2f},LP:{:.2f},LG:{:.2f}'.format(print_loss_avg,print_loss_ptr,print_loss_gate)
+        return 'L:{:.2f},LP:{:.2f},LG:{:.2f},LD:{:.2f}'.format(print_loss_avg, print_loss_ptr, print_loss_gate, print_loss_domain)
     
     def save_model(self, dec_type):
         directory = 'save/TRADE-'+args["addName"]+args['dataset']+str(self.task)+'/'+'HDD'+str(self.hidden_size)+'BSZ'+str(args['batch'])+'DR'+str(self.dropout)+str(dec_type)                 

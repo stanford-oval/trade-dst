@@ -1,9 +1,7 @@
 from models.TRADE import TRADE
 from utils.config import args
 import warnings
-import logging
-import os
-import shutil
+
 
 '''
 python3 myTest.py -ds= -path= -bsz=
@@ -27,8 +25,7 @@ def run():
     else:
         print("You need to provide the --dataset information")
 
-    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = \
-        prepare_data_seq(False, args['task'], False, batch_size=BSZ, train_sampler='random', test_sampler='random')
+    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = prepare_data_seq(False, args['task'], False, batch_size=BSZ, train_sampler='random', test_sampler='random')
 
     # import pdb; pdb.set_trace()
 

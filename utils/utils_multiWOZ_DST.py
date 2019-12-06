@@ -568,9 +568,9 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100, train_sa
 
         pair_train, train_max_len, slot_train, train, nb_train_vocab = [], 0, {}, [], 0
         pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, domain_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
-        dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
+        dev  = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer, train_sampler, test_sampler)
         pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, domain_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
-        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
+        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer, train_sampler, test_sampler,)
 
     test_4d = []
     if args['except_domain']!="":

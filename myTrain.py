@@ -14,6 +14,8 @@ from transformers.optimization import AdamW, WarmupLinearSchedule
 from models.TRADE import TRADE
 from utils.config import args
 
+from tensorboardX import SummaryWriter
+
 '''
 python myTrain.py -dec= -bsz= -hdd= -dr= -lr=
 '''
@@ -38,6 +40,9 @@ def run():
     fh = logging.FileHandler(log_file, mode='w')
     fh.setLevel(logging.INFO)
     logger.addHandler(fh)
+
+    # init tensorboard writer
+    tensorboard_writer = SummaryWriter(os.path.join(args['log_dir'], args['dataset']))
 
     seed = args['seed']
 
@@ -152,31 +157,46 @@ def run():
                 loss = loss / args['gradient_accumulation_steps']
 
             loss.backward()
+            tensorboard_writer.add_scalar('train/batch_loss', loss, i + 1)
 
             if (i + 1) % args['gradient_accumulation_steps'] == 0:
                 torch.nn.utils.clip_grad_norm_(core.parameters(), args['clip'])
+
+                for name, param in core.named_parameters():
+                    if param.grad is not None:
+                        try:
+                            tensorboard_writer.add_histogram('train/gradient_norms_{}'.format(name), param.grad, i + 1)
+                        except:
+                            logger.error('unexpected value for param {} with grad value of {}'.format(name, param.grad))
+
                 core.optimizer.step()
                 if isinstance(core.scheduler, WarmupLinearSchedule):
                     core.scheduler.step()
 
         logger.info(core.print_loss()) #TODO
 
-        if((epoch+1) % int(args['evalp']) == 0):
+        tensorboard_writer.add_scalar('train/loss_avg', core.loss / core.print_every, epoch)
+        tensorboard_writer.add_scalar('train/loss_ptr', core.loss_ptr / core.print_every, epoch)
+        tensorboard_writer.add_scalar('train/loss_gate', core.loss_gate / core.print_every, epoch)
+
+        if (epoch+1) % int(args['evalp']) == 0:
 
             acc = core.evaluate(dev, avg_best, SLOTS_LIST[2], device, early_stop)
             if isinstance(core.scheduler, lr_scheduler.ReduceLROnPlateau):
                 core.scheduler.step(acc)
 
-            if(acc >= avg_best):
+            if acc >= avg_best:
                 avg_best = acc
                 cnt = 0
                 best_model = core
             else:
                 cnt += 1
 
-            if(cnt == args["patience"] or (acc==1.0 and early_stop==None)):
+            if cnt == args["patience"] or (acc==1.0 and early_stop==None):
                 logger.info("Ran out of patient, early stop...")
                 break
+
+    tensorboard_writer.close()
 
 if __name__ == '__main__':
     run()
