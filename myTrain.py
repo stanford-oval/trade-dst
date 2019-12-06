@@ -55,7 +55,8 @@ def run():
 
     # Configure models and load data
     avg_best, cnt, acc = 0.0, 0, 0.0
-    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = prepare_data_seq(True, args['task'], False, batch_size=int(args['batch']))
+    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = \
+        prepare_data_seq(True, args['task'], False, batch_size=int(args['batch']), train_sampler='random', test_sampler='random')
 
     if args['local_rank'] == -1:
         device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -112,6 +113,15 @@ def run():
     core = model.module if hasattr(model, 'module') else model
 
     for epoch in range(args['max_epochs']):
+
+        if epoch >= args['epoch_threshold']:
+            if args['trim']:
+                turns_keep = epoch - args['epoch_threshold'] + 1
+            else:
+                turns_keep = 100000
+            train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = \
+                prepare_data_seq(True, args['task'], sequicity=False, batch_size=int(args['batch']), train_sampler='dialogue', test_sampler='dialogue', turns_keep=turns_keep)
+
         logger.info("Epoch:{}".format(epoch))
         # Run the train function
         if args['is_kube']:
@@ -120,6 +130,7 @@ def run():
             pbar = tqdm(enumerate(train), total=len(train))
         for i, data in pbar:
             batch = {}
+
             # wrap all numerical values as tensors for multi-gpu training
             for k, v in data.items():
                 if isinstance(v, torch.Tensor):

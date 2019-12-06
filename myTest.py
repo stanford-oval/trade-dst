@@ -1,6 +1,9 @@
 from models.TRADE import TRADE
 from utils.config import args
 import warnings
+import logging
+import os
+import shutil
 
 '''
 python3 myTest.py -ds= -path= -bsz=
@@ -24,7 +27,8 @@ def run():
     else:
         print("You need to provide the --dataset information")
 
-    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = prepare_data_seq(False, args['task'], False, batch_size=BSZ)
+    train, dev, test, test_special, lang, SLOTS_LIST, gating_dict, domain_dict, max_word = \
+        prepare_data_seq(False, args['task'], False, batch_size=BSZ, train_sampler='random', test_sampler='random')
 
     # import pdb; pdb.set_trace()
 
@@ -41,6 +45,7 @@ def run():
             domain_dict=domain_dict,
             t_total=-1,
             device='cpu',
+            logger=None,
             nb_train_vocab=max_word)
     else:
         raise ValueError("Model {} specified does not exist".format(args['decoder']))

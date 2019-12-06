@@ -433,7 +433,7 @@ def read_langs(file_name, gating_dict, domain_dict, SLOTS, dataset, lang, mem_la
     return data, max_resp_len, slot_temp
 
 
-def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity, tokenizer=None):
+def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity, tokenizer=None, train_sampler=None, test_sampler=None, turns_keep=10000):
     if(type and args['fisher_sample']>0):
         if not sequicity:
             shuffle(pairs)
@@ -450,23 +450,31 @@ def get_seq(pairs, lang, mem_lang, batch_size, type, sequicity, tokenizer=None):
 
     dataset = Dataset(data_info, lang.word2index, lang.word2index, sequicity, mem_lang.word2index)
 
-    if args["imbalance_sampler"] and type:
-        data_loader = torch.utils.data.DataLoader(dataset=dataset,
+    if type:
+        if train_sampler=='random':
+            data_loader = torch.utils.data.DataLoader(dataset=dataset,
                                                   batch_size=batch_size,
-                                                  # shuffle=type,
-                                                  collate_fn=lambda data: collate_fn(data, False, tokenizer),
-                                                  sampler=ImbalancedDatasetSampler(dataset))
-    elif args["no_shuffle_sampler"]:
-        data_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                                  # batch_size=batch_size,
-                                                  # shuffle=False,
-                                                  collate_fn=lambda data: collate_fn(data, True, tokenizer),
-                                                  batch_sampler=DialogueSampler(dataset))
-    else:
-        data_loader = torch.utils.data.DataLoader(dataset=dataset,
-                                                  batch_size=batch_size,
-                                                  shuffle=type,
+                                                  shuffle=True,
                                                   collate_fn=lambda data: collate_fn(data, False, tokenizer))
+        elif train_sampler=='dialogue':
+            data_loader = torch.utils.data.DataLoader(dataset=dataset,
+                                                      # batch_size=batch_size,
+                                                      # shuffle=False,
+                                                      collate_fn=lambda data: collate_fn(data, True, tokenizer),
+                                                      batch_sampler=DialogueSampler(dataset, turns_keep))
+
+    else:
+        if test_sampler=='random':
+            data_loader = torch.utils.data.DataLoader(dataset=dataset,
+                                                  batch_size=batch_size,
+                                                  shuffle=False,
+                                                  collate_fn=lambda data: collate_fn(data, False, tokenizer))
+        elif test_sampler=='dialogue':
+            data_loader = torch.utils.data.DataLoader(dataset=dataset,
+                                                      # batch_size=batch_size,
+                                                      # shuffle=False,
+                                                      collate_fn=lambda data: collate_fn(data, True, tokenizer),
+                                                      batch_sampler=DialogueSampler(dataset, turns_keep))
 
     return data_loader
 
@@ -497,7 +505,7 @@ def get_slot_information(ontology):
     return SLOTS
 
 
-def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
+def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100, train_sampler=None, test_sampler=None, turns_keep=1000000):
     sequicity = args['use_state_enc']
     if args['encoder'] == 'BERT':
         tokenizer = BertTokenizer.from_pretrained(args['bert_model'], do_lower_case=args['do_lower_case'])
@@ -531,12 +539,12 @@ def prepare_data_seq(training, task="dst", sequicity=0, batch_size=100):
 
     if training:
         pair_train, train_max_len, slot_train = read_langs(file_train, gating_dict, domain_dict, ALL_SLOTS, "train", lang, mem_lang, sequicity, training)
-        train = get_seq(pair_train, lang, mem_lang, batch_size, True, sequicity, tokenizer)
+        train = get_seq(pair_train, lang, mem_lang, batch_size, True, sequicity, tokenizer, train_sampler, test_sampler, turns_keep)
         nb_train_vocab = lang.n_words
         pair_dev, dev_max_len, slot_dev = read_langs(file_dev, gating_dict, domain_dict, ALL_SLOTS, "dev", lang, mem_lang, sequicity, training)
-        dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
+        dev   = get_seq(pair_dev, lang, mem_lang, eval_batch, False, sequicity, tokenizer, train_sampler, test_sampler, turns_keep)
         pair_test, test_max_len, slot_test = read_langs(file_test, gating_dict, domain_dict, ALL_SLOTS, "test", lang, mem_lang, sequicity, training)
-        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer)
+        test  = get_seq(pair_test, lang, mem_lang, eval_batch, False, sequicity, tokenizer, train_sampler, test_sampler, turns_keep)
         if os.path.exists(folder_name+lang_name) and os.path.exists(folder_name+mem_lang_name):
             print("[Info] Loading saved lang files...")
             with open(folder_name+lang_name, 'rb') as handle: 
@@ -635,9 +643,10 @@ class DialogueSampler(torch.utils.data.sampler.Sampler):
         indices (list, optional): a list of indices
         num_samples (int, optional): number of samples to draw
     """
-    def __init__(self, dataset):
+    def __init__(self, dataset, turns_keep):
+        self.turns_keep = turns_keep
         self.dataset = list(dataset)
-        self.dataset.sort(key=lambda turn: (turn['ID'] , turn['turn_id']))
+        # self.dataset.sort(key=lambda turn: (turn['ID'], turn['turn_id']))
         self.dialog_indices = []
         i = 0
         while i < len(self.dataset):
@@ -646,9 +655,14 @@ class DialogueSampler(torch.utils.data.sampler.Sampler):
            while i < len(self.dataset) and self.dataset[i]['ID'] == id:
                 i += 1
            self.dialog_indices.append((begin, i))
+
     def __iter__(self):
         random.shuffle(self.dialog_indices)
         for begin, end in self.dialog_indices:
-             yield list(range(begin, end))
+            if end > self.turns_keep:
+                yield list(range(begin, begin+self.turns_keep))
+            else:
+                yield list(range(begin, end))
+
     def __len__(self):
-        return len(self.dialog_indices) # FIXME
+        return len(self.dialog_indices)

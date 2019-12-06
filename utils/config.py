@@ -103,6 +103,7 @@ parser.add_argument("--num_turns", type=int, default=-1, help='number of previou
 parser.add_argument("--use_state_enc", type=int, default=0, help='')
 parser.add_argument("--epoch_threshold", type=int, default=100000, help='')
 parser.add_argument('-gtr', '--gold_turn_ratio', help='gold_turn_ratio', type=float, required=False, default=0.5)
+parser.add_argument('--trim', help='trim data for each epoch so number of turns gradually increases', type=int, required=False, default=1)
 
 # bert parameters
 parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")

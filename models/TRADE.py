@@ -60,7 +60,8 @@ class TRADE(nn.Module):
         self.state_encoder = EncoderRNN(self.lang.n_words, hidden_size, self.dropout, self.device, self.cell_type)
 
         if path:
-            self.logger.info("MODEL {} LOADED".format(str(path)))
+            if self.logger:
+                self.logger.info("MODEL {} LOADED".format(str(path)))
             trained_encoder = torch.load(str(path)+'/enc.th', map_location=self.device)
             trained_state_encoder = torch.load(str(path)+'/state_enc.th', map_location=self.device)
             trained_decoder = torch.load(str(path)+'/dec.th', map_location=self.device)
@@ -117,9 +118,6 @@ class TRADE(nn.Module):
         use_teacher_forcing = random.random() < args["teacher_forcing_ratio"]
         all_point_outputs, gates, domains, words_point_out, words_class_out =\
             self.encode_and_decode(data, use_teacher_forcing, slot_temp, epoch, True)
-
-        # ignore_gate_idx = [v for k, v in self.gating_dict.items() if k in ['dontcare', 'none']]
-        # ignore_domain_idx = [v for k, v in self.domain_dict.items() if k in ['absent']]
 
         gates_mask = None
         domains_mask = None
@@ -192,34 +190,38 @@ class TRADE(nn.Module):
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
         batch_size = data['prev_generate_y'].shape[0]
-        if epoch < args['epoch_threshold'] and training:
-            prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1).to(self.device)
-        else:
-            gold_turn_ratio = random.random() < args["gold_turn_ratio"] if training else 0
-            if gold_turn_ratio:
-                prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1).to(self.device)
-            else:
-                prev_generate_y = []
 
-                for b in range(batch_size):
-                    cur_encoded_outputs = encoded_outputs[[b], ...]
-                    cur_encoded_hidden = encoded_hidden[:, [b], ...]
-                    max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
-                    cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out =\
-                                     self.decoder(1,  cur_encoded_hidden, cur_encoded_outputs, data['context_len'][[b]],
-                                     story[[b], ...],
-                                     max_res_len, data['generate_y'][[b], ...],  use_teacher_forcing, slot_temp)
-                    predicted_slots = self.generate_slots(cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out, slot_temp)
-                    prev_generate_y.append(predicted_slots)
-
-                prev_y, prev_y_lengths = self.merge_multi_response(prev_generate_y)
-                prev_generate_y = prev_y.reshape(batch_size, -1).to(self.device)
-
-        state_encoded_outputs, state_encoded_hidden = self.state_encoder(prev_generate_y, None)
         if args['use_state_enc']:
+            if epoch < args['epoch_threshold'] and training:
+                prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
+            else:
+                gold_turn_ratio = random.random() < args["gold_turn_ratio"] if training else 0
+                if gold_turn_ratio:
+                    prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
+                else:
+                    prev_generate_y = []
+
+                    for b in range(batch_size):
+                        cur_encoded_outputs = encoded_outputs[[b], ...]
+                        cur_encoded_hidden = encoded_hidden[:, [b], ...]
+                        max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
+                        cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out =\
+                                         self.decoder(1,  cur_encoded_hidden, cur_encoded_outputs, data['context_len'][[b]],
+                                         story[[b], ...],
+                                         max_res_len, data['generate_y'][[b], ...],  use_teacher_forcing, slot_temp)
+                        predicted_slots = self.generate_slots(cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out, slot_temp)
+                        prev_generate_y.append(predicted_slots)
+
+                    prev_y, prev_y_lengths = self.merge_multi_response(prev_generate_y)
+                    prev_generate_y = prev_y.reshape(batch_size, -1)
+
+            prev_generate_y = prev_generate_y.to(self.device)
+            state_encoded_outputs, state_encoded_hidden = self.state_encoder(prev_generate_y, None)
+
             final_outputs = torch.cat([encoded_outputs, state_encoded_outputs], dim=1)
             final_hidden = encoded_hidden
             new_story = torch.cat([story, prev_generate_y], dim=1)
+
         else:
             final_outputs = encoded_outputs
             final_hidden = encoded_hidden
@@ -316,7 +318,8 @@ class TRADE(nn.Module):
         # Set to not-training mode to disable dropout
         self.encoder.train(False)
         self.decoder.train(False)
-        self.logger.info("STARTING EVALUATION")
+        if self.logger:
+            self.logger.info("STARTING EVALUATION")
         all_prediction = {}
 
         if args['is_kube']:
@@ -396,12 +399,14 @@ class TRADE(nn.Module):
             if save_dir is not "" and not os.path.exists(save_dir):
                 os.mkdir(save_dir)
             json.dump(all_prediction, open(os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string)), 'w'), indent=4)
-            self.logger.info("saved generated samples: {}".format(os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string))))
+            if self.logger:
+                self.logger.info("saved generated samples: {}".format(os.path.join(save_dir, "prediction_{}_{}.json".format(self.name, save_string))))
 
         joint_acc_score_ptr, F1_score_ptr, turn_acc_score_ptr = self.evaluate_metrics(all_prediction, "pred_bs_ptr", slot_temp)
 
         evaluation_metrics = {"Joint Acc":joint_acc_score_ptr, "Turn Acc":turn_acc_score_ptr, "Joint F1":F1_score_ptr}
-        self.logger.info(evaluation_metrics)
+        if self.logger:
+            self.logger.info(evaluation_metrics)
         print(evaluation_metrics)
 
         # Set back to training mode
@@ -414,12 +419,14 @@ class TRADE(nn.Module):
         if (early_stop == 'F1'):
             if (F1_score >= matric_best):
                 self.save_model('ENTF1-{:.4f}'.format(F1_score))
-                self.logger.info("MODEL SAVED")
+                if self.logger:
+                    self.logger.info("MODEL SAVED")
             return F1_score
         else:
             if (joint_acc_score >= matric_best):
                 self.save_model('ACC-{:.4f}'.format(joint_acc_score))
-                self.logger.info("MODEL SAVED")
+                if self.logger:
+                    self.logger.info("MODEL SAVED")
             return joint_acc_score
 
     def evaluate_metrics(self, all_prediction, from_which, slot_temp):
@@ -684,7 +691,8 @@ class Generator(nn.Module):
             else:
                 self.domain_emb = torch.zeros((len(domains), hidden_size), requires_grad=False)
 
-            self.logger.info('Using pretrained domain embedding: {}'.format(self.domain_emb.size()))
+            if self.logger:
+                self.logger.info('Using pretrained domain embedding: {}'.format(self.domain_emb.size()))
 
         self.slot_w2i = {}
         for slot in self.slots:
