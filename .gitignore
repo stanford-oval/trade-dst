@@ -25,6 +25,7 @@ __pycache__
 log*/
 log*
 graph.gv*
+prediction*
 
 # Distribution / packaging
 .Python

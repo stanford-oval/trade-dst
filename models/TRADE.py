@@ -195,25 +195,48 @@ class TRADE(nn.Module):
             if epoch < args['epoch_threshold'] and training:
                 prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
             else:
-                gold_turn_ratio = random.random() < args["gold_turn_ratio"] if training else 0
-                if gold_turn_ratio:
+                gold_turn_ratio = min(args['gold_turn_ratio_begin'] - (epoch - args['epoch_threshold'] + 1) * args['gold_turn_ratio_step'], args['gold_turn_ratio_end'])
+                is_gold = random.random() < gold_turn_ratio if training else 0
+                if is_gold:
                     prev_generate_y = data['prev_generate_y'].reshape(batch_size, -1)
                 else:
-                    prev_generate_y = []
+                    id_indices = []
+                    i = 0
+                    while i < len(data['ID']):
+                        id = data['ID'][i]
+                        begin = i
+                        while i < len(data['ID']) and data['ID'][i] == id:
+                            i += 1
+                        id_indices.append(list(range(begin, i)))
 
-                    for b in range(batch_size):
-                        cur_encoded_outputs = encoded_outputs[[b], ...]
-                        cur_encoded_hidden = encoded_hidden[:, [b], ...]
-                        max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
-                        cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out =\
-                                         self.decoder(1,  cur_encoded_hidden, cur_encoded_outputs, data['context_len'][[b]],
-                                         story[[b], ...],
-                                         max_res_len, data['generate_y'][[b], ...],  use_teacher_forcing, slot_temp)
-                        predicted_slots = self.generate_slots(cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out, slot_temp)
-                        prev_generate_y.append(predicted_slots)
+                    global_prev_generate_y = []
 
-                    prev_y, prev_y_lengths = self.merge_multi_response(prev_generate_y)
-                    prev_generate_y = prev_y.reshape(batch_size, -1)
+                    for vals in id_indices:
+
+                        prev_generate_y = []
+                        first_prev_y = ["none"] * len(slot_temp)
+                        first_prev_y_encoded = []
+                        for value in first_prev_y:
+                            v = [self.lang.word2index[word] if word in self.lang.word2index else UNK_token for word in value.split()] + [EOS_token]
+                            first_prev_y_encoded.append(v)
+
+                        prev_generate_y.append(first_prev_y_encoded)
+
+                        for b in vals[:-1]:
+                            cur_encoded_outputs = encoded_outputs[[b], ...]
+                            cur_encoded_hidden = encoded_hidden[:, [b], ...]
+                            max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
+                            cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out =\
+                                             self.decoder(1,  cur_encoded_hidden, cur_encoded_outputs, data['context_len'][[b]],
+                                             story[[b], ...],
+                                             max_res_len, data['generate_y'][[b], ...],  use_teacher_forcing, slot_temp)
+                            predicted_slots = self.generate_slots(cur_point_outputs, cur_gate_outputs, cur_domains_output, cur_words_point_out, cur_words_class_out, slot_temp)
+                            prev_generate_y.append(predicted_slots)
+
+                        global_prev_generate_y.extend(prev_generate_y)
+
+                    prev_y, prev_y_lengths = self.merge_multi_response(global_prev_generate_y)
+                    prev_generate_y = prev_y.reshape(prev_y.shape[0], -1)
 
             prev_generate_y = prev_generate_y.to(self.device)
             state_encoded_outputs, state_encoded_hidden = self.state_encoder(prev_generate_y, None)

@@ -102,8 +102,10 @@ parser.add_argument("--is_kube", type=str2bool, default=True, help="turn on spec
 parser.add_argument("--num_turns", type=int, default=-1, help='number of previous turns to encode at each turn')
 parser.add_argument("--use_state_enc", type=int, default=0, help='')
 parser.add_argument("--epoch_threshold", type=int, default=100000, help='')
-parser.add_argument('-gtr', '--gold_turn_ratio', help='gold_turn_ratio', type=float, required=False, default=0.5)
-parser.add_argument('--trim', help='trim data for each epoch so number of turns gradually increases', type=int, required=False, default=1)
+parser.add_argument('-gtrb', '--gold_turn_ratio_begin', help='', type=float, required=False, default=0.8)
+parser.add_argument('-gtre', '--gold_turn_ratio_end', help='', type=float, required=False, default=0.2)
+parser.add_argument('-gtrs', '--gold_turn_ratio_step', help='', type=float, required=False, default=0.05)
+parser.add_argument('--trim', help='trim data for each epoch so number of turns gradually increases', type=int, required=False, default=0)
 
 # bert parameters
 parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")
@@ -113,6 +115,7 @@ parser.add_argument("--encoder", type=str, default='RNN', choices=['RNN', 'BERT'
 parser.add_argument("--local_rank", type=int, default=-1, help="local_rank for distributed training on gpus")
 
 parser.add_argument('-mcl', "--max_context_length", type=int, default=-1, help="maximum length of context should not be larger than 512 when using BERT as encoder")
+parser.add_argument('-tol', "--tolerance", type=float, default=0.05, help="accuracy tolerance for patience")
 
 args = vars(parser.parse_args())
 

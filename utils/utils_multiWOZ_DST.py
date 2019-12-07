@@ -658,11 +658,17 @@ class DialogueSampler(torch.utils.data.sampler.Sampler):
 
     def __iter__(self):
         random.shuffle(self.dialog_indices)
-        for begin, end in self.dialog_indices:
-            if end > self.turns_keep:
-                yield list(range(begin, begin+self.turns_keep))
-            else:
-                yield list(range(begin, end))
+        i = 0
+        while i < len(self.dialog_indices):
+            batch = []
+            while i < len(self.dialog_indices) and len(batch) < 10:
+                begin, end = self.dialog_indices[i]
+                if end - begin > self.turns_keep:
+                    batch += list(range(begin, begin + self.turns_keep))
+                else:
+                    batch += list(range(begin, end))
+                i += 1
+            yield batch
 
     def __len__(self):
         return len(self.dialog_indices)

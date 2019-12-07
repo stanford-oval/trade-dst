@@ -185,7 +185,7 @@ def run():
             if isinstance(core.scheduler, lr_scheduler.ReduceLROnPlateau):
                 core.scheduler.step(acc)
 
-            if acc >= avg_best:
+            if abs(acc - avg_best) > args['tolerance']:
                 avg_best = acc
                 cnt = 0
                 best_model = core
