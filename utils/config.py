@@ -106,6 +106,7 @@ parser.add_argument('-gtrb', '--gold_turn_ratio_begin', help='', type=float, req
 parser.add_argument('-gtre', '--gold_turn_ratio_end', help='', type=float, required=False, default=0.2)
 parser.add_argument('-gtrs', '--gold_turn_ratio_step', help='', type=float, required=False, default=0.05)
 parser.add_argument('--trim', help='trim data for each epoch so number of turns gradually increases', type=int, required=False, default=0)
+parser.add_argument('--pad_care', help='', type=int, required=False, default=1)
 
 # bert parameters
 parser.add_argument("--bert_model", default=None, type=str, help="Bert pre-trained model selected")

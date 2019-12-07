@@ -7,7 +7,6 @@ import torch
 import torch.nn as nn
 import os
 import numpy as np
-import logging
 
 from utils.masked_cross_entropy import masked_cross_entropy_for_value
 from utils.config import args, PAD_token, SOS_token, EOS_token, UNK_token
@@ -17,6 +16,7 @@ from tqdm import tqdm
 from transformers.modeling_bert import BertModel
 from transformers.file_utils import PYTORCH_PRETRAINED_BERT_CACHE
 from transformers.optimization import AdamW, WarmupLinearSchedule
+
 
 class TRADE(nn.Module):
     def __init__(self, hidden_size, lang, path, task, lr, dropout, slots, gating_dict, domain_dict, t_total, device, logger, nb_train_vocab=0):
@@ -190,6 +190,9 @@ class TRADE(nn.Module):
             encoded_outputs, encoded_hidden = self.encoder(all_input_ids, all_input_mask, all_segment_ids, all_sub_word_masks)
             encoded_hidden = encoded_hidden.unsqueeze(0)
         batch_size = data['prev_generate_y'].shape[0]
+        prev_y_size = data['prev_generate_y'].shape[1:].numel()
+
+        context_len = data['context_len']
 
         if args['use_state_enc']:
             if epoch < args['epoch_threshold'] and training:
@@ -237,13 +240,30 @@ class TRADE(nn.Module):
 
                     prev_y, prev_y_lengths = self.merge_multi_response(global_prev_generate_y)
                     prev_generate_y = prev_y.reshape(prev_y.shape[0], -1)
+                    prev_y_size = prev_generate_y.shape[-1]
 
             prev_generate_y = prev_generate_y.to(self.device)
             state_encoded_outputs, state_encoded_hidden = self.state_encoder(prev_generate_y, None)
 
-            final_outputs = torch.cat([encoded_outputs, state_encoded_outputs], dim=1)
-            final_hidden = encoded_hidden
-            new_story = torch.cat([story, prev_generate_y], dim=1)
+            if args['pad_care']:
+                final_outputs = []
+                # final_hidden = []
+                new_story = []
+                new_length = []
+                for enc_val_b, state_val_b, story_b, prev_y_b, context_len_b in zip(encoded_outputs, state_encoded_outputs, story, prev_generate_y, data['context_len']):
+                    final_outputs.append(torch.cat((enc_val_b[:context_len_b], state_val_b, enc_val_b[context_len_b:]), dim=0))
+                    new_story.append(torch.cat((story_b[:context_len_b], prev_y_b, story_b[context_len_b:]), dim=0))
+                    new_length.append(context_len_b + prev_y_size)
+                final_outputs = torch.stack(final_outputs, dim=0)
+                new_story = torch.stack(new_story, dim=0)
+
+                final_hidden = encoded_hidden
+                context_len = new_length
+
+            else:
+                final_outputs = torch.cat([encoded_outputs, state_encoded_outputs], dim=1)
+                final_hidden = encoded_hidden
+                new_story = torch.cat([story, prev_generate_y], dim=1)
 
         else:
             final_outputs = encoded_outputs
@@ -257,7 +277,7 @@ class TRADE(nn.Module):
         max_res_len = data['generate_y'].size(2) if self.encoder.training else 10
 
         all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out = self.decoder(batch_size, \
-            final_hidden, final_outputs, data['context_len'], new_story, max_res_len, data['generate_y'], \
+            final_hidden, final_outputs, context_len, new_story, max_res_len, data['generate_y'], \
             use_teacher_forcing, slot_temp)
 
         return all_point_outputs, all_gate_outputs, all_domains_output, words_point_out, words_class_out
