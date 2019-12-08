@@ -167,7 +167,7 @@ def transfer_data(original_data, from_domain, to_domain):
 
 def main():
     if len(sys.argv) < 4:
-        print(f"Usage: {sys.argv[0]} <synthetic.json> <from-domain> <to-domain> [<keep-pct>] [<do-transfer>]")
+        print(f"Usage: {sys.argv[0]} <synthetic.json> <from-domain> <to-domain> [<keep-pct>] [<do-transfer>] [<sample-prob>]")
         sys.exit(1)
 
     synthetic_json = sys.argv[1]
@@ -185,6 +185,10 @@ def main():
         do_transfer = sys.argv[5] in ('yes', 'True', '1')
     else:
         do_transfer = True
+    if len(sys.argv) > 6:
+        sample_prob = float(sys.argv[6])
+    else:
+        sample_prob = 0.3
 
     original_data = load_data(to_domain, keep_pct)
 
@@ -199,7 +203,7 @@ def main():
     new_data += original_data
 
     with open(synthetic_json) as fp:
-        for new_dialogue in process_synthetic_json(prefixes, continuations, from_file=fp, only_domain=to_domain):
+        for new_dialogue in process_synthetic_json(prefixes, continuations, from_file=fp, only_domain=to_domain, sample_prob=sample_prob):
             new_data.append(new_dialogue)
 
     json.dump(new_data, sys.stdout, indent=2)

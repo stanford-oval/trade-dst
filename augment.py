@@ -30,10 +30,14 @@ def load_data():
 
 def main():
     if len(sys.argv) < 2:
-        print(f"Usage: {sys.argv[0]} <synthetic.json>")
+        print(f"Usage: {sys.argv[0]} <synthetic.json> [<sample-prob>]")
         sys.exit(1)
 
     synthetic_json = sys.argv[1]
+    if len(sys.argv) > 2:
+        sample_prob = float(sys.argv[2])
+    else:
+        sample_prob = 0.3
 
     original_data = load_data()
     prefixes = compute_prefixes(original_data)
@@ -43,7 +47,7 @@ def main():
     new_data += original_data
 
     with open(synthetic_json) as fp:
-        for new_dialogue in process_synthetic_json(prefixes, continuations, from_file=fp):
+        for new_dialogue in process_synthetic_json(prefixes, continuations, from_file=fp, sample_prob=sample_prob):
             new_data.append(new_dialogue)
 
     json.dump(new_data, sys.stdout, indent=2)

@@ -411,7 +411,7 @@ def process_synthetic(prefixes, continuations, from_file, only_domain=None, incl
         yield new_dialogue
 
 
-def process_synthetic_json(prefixes, continuations, from_file, only_domain=None):
+def process_synthetic_json(prefixes, continuations, from_file, only_domain=None, sample_prob=0.3):
     synthetic_data = json.load(from_file)
     random.shuffle(synthetic_data)
 
@@ -419,7 +419,7 @@ def process_synthetic_json(prefixes, continuations, from_file, only_domain=None)
         if only_domain is not None and only_domain not in synth_dialogue['domains']:
             continue
 
-        if not coin(0.3):
+        if not coin(sample_prob):
             continue
 
         new_dialogue = add_continuation(continuations, synth_dialogue)
