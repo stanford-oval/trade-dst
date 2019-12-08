@@ -23,19 +23,22 @@ TRANSFER_PHRASES = {
         'train ticket',
         'train',
     ],
-
-    # FIXME
     'restaurant': [
         'restaurant reservation',
         'restaurant',
         'food place',
-        'place to eat'
+        'place to eat',
+        'place to dine'
     ],
     'hotel': [
         'hotel',
-        'place to stay'
+        'place to stay',
+        'room'
     ],
-    'attraction': []
+    'attraction': [
+        'attraction',
+        'thing to do'
+    ]
 }
 
 def load_data(except_domain, keep_pct=0):
