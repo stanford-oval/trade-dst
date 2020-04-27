@@ -51,8 +51,29 @@ class TRADE(nn.Module):
             trained_encoder = torch.load(str(path)+'/enc.th', map_location=self.device)
             trained_decoder = torch.load(str(path)+'/dec.th', map_location=self.device)
 
-            self.encoder.load_state_dict(trained_encoder.state_dict())
-            self.decoder.load_state_dict(trained_decoder.state_dict())
+            # fix small confusion between old and newer trained models
+            encoder_dict = trained_encoder.state_dict()
+            new_encoder_dict = {}
+            for key in encoder_dict:
+                mapped_key = key
+                if key.startswith('gru.'):
+                    mapped_key = 'rnn.' + key[len('gru.'):]
+                new_encoder_dict[mapped_key] = encoder_dict[key]
+
+            decoder_dict = trained_decoder.state_dict()
+            new_decoder_dict = {}
+            for key in decoder_dict:
+                mapped_key = key
+                if key.startswith('gru.'):
+                    mapped_key = 'rnn.' + key[len('gru.'):]
+                new_decoder_dict[mapped_key] = decoder_dict[key]
+
+            if not 'W_slot_embed.weight' in new_decoder_dict:
+                new_decoder_dict['W_slot_embed.weight'] = torch.zeros((hidden_size, 2*hidden_size), requires_grad=False)
+                new_decoder_dict['W_slot_embed.bias'] = torch.zeros((hidden_size,), requires_grad=False)
+
+            self.encoder.load_state_dict(new_encoder_dict)
+            self.decoder.load_state_dict(new_decoder_dict)
 
 
         # Initialize optimizers and criterion
